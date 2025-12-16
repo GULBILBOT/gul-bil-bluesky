@@ -22,6 +22,15 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Free up disk space
+        run: |
+          # Remove unnecessary software to free up space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
       - name: Cache Python dependencies
         uses: actions/cache@v4
         with:
@@ -33,6 +42,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # Install CPU-only PyTorch first (much smaller, ~200MB vs 3GB+)
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
       - name: Restore shuffle state
