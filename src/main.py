@@ -80,7 +80,14 @@ def detect_yellow_car(image_path):
         # Load image with OpenCV
         img = cv2.imread(str(image_path))
         if img is None:
-            logging.error(f"Could not load image: {image_path}")
+            # Log file details to debug why cv2.imread failed
+            if image_path.exists():
+                file_size = image_path.stat().st_size
+                with open(image_path, "rb") as f:
+                    header = f.read(16)
+                logging.error(f"Could not load image: {image_path} (size={file_size}, header={header[:8].hex()})")
+            else:
+                logging.error(f"Could not load image: {image_path} (file does not exist)")
             return {"detected": False, "boxes": []}
 
         # Run YOLO26 inference
@@ -286,12 +293,25 @@ def download_image(url, dest, timeout=10):
             dest.unlink()
             return False
         
-        # Log file details for debugging
+        # Read and validate file header
         with open(dest, "rb") as f:
             header = f.read(16)
-        logging.debug(f"Downloaded {dest.name}: {file_size} bytes, header: {header[:8].hex()}")
         
-        return True
+        # Check for valid image magic bytes
+        is_jpeg = header[:2] == b'\xff\xd8'
+        is_png = header[:4] == b'\x89PNG'
+        is_gif = header[:4] == b'GIF8'
+        is_bmp = header[:2] == b'BM'
+        is_webp = header[8:12] == b'WEBP'
+        is_valid_image = is_jpeg or is_png or is_gif or is_bmp or is_webp
+        
+        if is_valid_image:
+            logging.debug(f"Downloaded {dest.name}: {file_size} bytes, valid image")
+            return True
+        else:
+            logging.info(f"Invalid image format for {dest.name}: header {header[:16].hex()} - likely HTML/error response")
+            dest.unlink()
+            return False
         
     except Exception as e:
         logging.debug(f"Exception downloading {url}: {e}")
