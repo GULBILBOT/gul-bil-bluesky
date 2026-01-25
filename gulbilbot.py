@@ -40,7 +40,7 @@ BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
 # YOLO26 configuration - STRICTER DETECTION
 YOLO_MODEL_PATH = "yolo26n.pt"
 CONF_THRESHOLD = 0.5  # Increased from 0.3 - higher confidence required
-YELLOW_RATIO_THRESHOLD = 0.35  # Increased from 0.15 - much more yellow required (35% vs 15%)
+YELLOW_RATIO_THRESHOLD = 0.45  # Increased from 0.35 - 45% minimum yellow pixels in bounding box
 
 # Global YOLO model
 yolo_model = None
@@ -121,9 +121,12 @@ def detect_yellow_car(image_path):
                 # Convert to HSV and count yellow pixels
                 hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
                 
-                # HSV range for yellow (adjusted for traffic cameras)
-                lower_yellow = np.array([15, 80, 80])
-                upper_yellow = np.array([35, 255, 255])
+                # HSV range for pure yellow (strict to avoid tan/brown/orange)
+                # Hue: 20-30 (pure yellow, avoiding orange <20 and lime green >30)
+                # Saturation: 100-255 (vibrant, avoiding muted/tan colors)
+                # Value: 100-255 (bright, avoiding dark browns)
+                lower_yellow = np.array([20, 100, 100])
+                upper_yellow = np.array([30, 255, 255])
                 mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
                 # Calculate yellow ratio in crop
