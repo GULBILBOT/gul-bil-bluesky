@@ -24,13 +24,12 @@ An automated bot that monitors Norwegian traffic cameras for yellow cars and pos
 ### 1. Repository Structure
 ```
 your-repo/
-├── src/
-│   └── main.py
+├── test_100_images.py
 ├── requirements.txt
 ├── valid_webcam_ids.txt
 ├── .github/
 │   └── workflows/
-│       └── yellow-car-bot.yml
+│       └── post.yml
 └── README.md
 ```
 
@@ -69,13 +68,12 @@ Note: No API tokens required! YOLO26 runs locally on GitHub Actions runners.
 
 ## Configuration
 
-Edit these variables in `src/main.py`:
+Edit these variables in `test_100_images.py`:
 
 ```python
 CONF_THRESHOLD = 0.3          # YOLO26 vehicle detection confidence (lower = more sensitive)
 YELLOW_RATIO_THRESHOLD = 0.15 # Minimum ratio of yellow pixels to confirm yellow car
-MAX_RUNTIME_MINUTES = 20      # Max runtime per session
-IMAGES_PER_SESSION = 30       # Images to process per session
+SAMPLE_SIZE = 100             # Number of images to test per run
 ```
 
 **Supported Vehicle Types**: car, truck, bus, van, threewheel
@@ -87,25 +85,18 @@ The bot runs **3 times per day**:
 - 2:00 PM UTC
 - 10:00 PM UTC
 
-**Budget**: ~63 minutes/day, ~1,890 minutes/month (within 2000 limit)
+**Budget**: ~20 minutes/day, ~600 minutes/month (well within 2000 limit)
 
-**Coverage**: All 814 cameras processed every 9 days in randomized order
-
-## How the Shuffling Works
-
-1. **First Run**: Shuffles all 814 camera URLs randomly
-2. **Subsequent Runs**: Continues from where it left off
-3. **Cycle Complete**: When all URLs processed, reshuffles for next cycle
-4. **Fair Distribution**: Each camera gets processed at different times across cycles
+**Coverage**: 100 random cameras per run, all 814 cameras covered every ~8 runs
 
 ## Statistics
 
-The bot tracks:
-- Total images processed (all-time)
-- Yellow clusters detected
-- Cars confirmed by AI
+Each run tracks:
+- Images downloaded successfully
+- Yellow cars detected
 - Successful Bluesky posts
-- Processing progress through current cycle
+- Processing time
+- Results saved to `test_100_results.txt`
 
 ## Yellow Detection Algorithm
 
@@ -162,11 +153,11 @@ Trigger a manual run:
 
 ## File Descriptions
 
-- **`src/main.py`**: Main bot logic
+- **`test_100_images.py`**: Main bot script (downloads 100 random images, detects yellow cars, posts to Bluesky)
 - **`requirements.txt`**: Python dependencies
-- **`valid_webcam_ids.txt`**: List of traffic camera URLs
-- **`.github/workflows/yellow-car-bot.yml`**: GitHub Actions workflow
-- **`shuffle_state.json`**: Persistent state (auto-generated)
+- **`valid_webcam_ids.txt`**: List of 814 traffic camera URLs
+- **`.github/workflows/post.yml`**: GitHub Actions workflow (runs 3x daily)
+- **`test_100_results.txt`**: Results from latest run (auto-generated)
 
 ## Privacy & Ethics
 

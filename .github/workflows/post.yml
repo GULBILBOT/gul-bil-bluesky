@@ -46,14 +46,6 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
-      - name: Restore shuffle state
-        uses: actions/cache@v4
-        with:
-          path: shuffle_state.json
-          key: shuffle-state-v2-${{ github.run_number }}
-          restore-keys: |
-            shuffle-state-v2-
-
       - name: Run 100-Image Test with Debug Output
         run: python test_100_images.py
         env:
@@ -61,13 +53,6 @@ jobs:
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
           KEY_GITHUB_TOKEN: ${{ secrets.KEY_GITHUB_TOKEN }}
           HF_API_TOKEN: ${{ secrets.HF_API_TOKEN }}
-
-      - name: Save shuffle state
-        uses: actions/cache@v4
-        if: always()  # Save state even if workflow fails
-        with:
-          path: shuffle_state.json
-          key: shuffle-state-v2-${{ github.run_number }}
 
       - name: Cleanup temporary files
         if: always()
