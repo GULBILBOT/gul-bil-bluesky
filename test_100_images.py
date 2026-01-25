@@ -3,12 +3,18 @@
 Download and test 100 random webcam images for yellow car detection
 """
 
+import base64
+import os
 import random
 import requests
 import logging
 from pathlib import Path
-from datetime import datetime
-from src.main import load_yolo_model, detect_yellow_car, download_image
+from datetime import datetime, timezone
+from atproto import Client, models
+from dotenv import load_dotenv
+from src.main import load_yolo_model, detect_yellow_car, download_image, draw_bounding_boxes, get_image_data_url
+
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -22,6 +28,10 @@ TEST_FOLDER.mkdir(exist_ok=True)
 # Read webcam URLs
 WEBCAM_URLS_FILE = Path("valid_webcam_ids.txt")
 
+# Bluesky credentials
+BSKY_HANDLE = os.getenv("BSKY_HANDLE")
+BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
+
 def load_webcam_urls():
     """Load all webcam URLs"""
     if not WEBCAM_URLS_FILE.exists():
@@ -32,6 +42,46 @@ def load_webcam_urls():
         urls = [line.strip() for line in f if line.strip()]
     
     return urls
+
+
+def post_to_bluesky(image_path, alt_text):
+    """Post image to Bluesky with alt text"""
+    if not BSKY_HANDLE or not BSKY_PASSWORD:
+        logging.error("Bluesky credentials not defined")
+        return False
+
+    try:
+        client = Client()
+        client.login(BSKY_HANDLE.strip(), BSKY_PASSWORD.strip())
+
+        image_data_url = get_image_data_url(image_path, "jpg", max_size=(400, 300), quality=70)
+        if not image_data_url:
+            return False
+
+        header, encoded = image_data_url.split(',', 1)
+        image_bytes = base64.b64decode(encoded)
+        blob = client.upload_blob(image_bytes).blob
+
+        client.app.bsky.feed.post.create(
+            repo=client.me.did,
+            record=models.AppBskyFeedPost.Record(
+                text="GUL BIL!",
+                created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                embed=models.AppBskyEmbedImages.Main(
+                    images=[
+                        models.AppBskyEmbedImages.Image(
+                            image=blob,
+                            alt=alt_text
+                        )
+                    ]
+                )
+            )
+        )
+        logging.info("Successfully posted yellow car to Bluesky!")
+        return True
+    except Exception as e:
+        logging.error(f"Error posting to Bluesky: {e}")
+        return False
 
 def test_100_images():
     """Download and test 100 random webcam images"""
@@ -62,6 +112,7 @@ def test_100_images():
     results = []
     downloaded = 0
     detected = 0
+    posted = 0
     errors = 0
     
     print("=" * 80)
@@ -93,6 +144,22 @@ def test_100_images():
                 detected += 1
                 vehicle_types = ", ".join(set(box[4] for box in result["boxes"]))
                 print(f"→ YELLOW {vehicle_types.upper()} FOUND ({num_boxes} vehicle(s))")
+                
+                # Draw bounding boxes and post to Bluesky
+                annotated_path = draw_bounding_boxes(image_path, result["boxes"])
+                image_to_post = annotated_path if annotated_path else image_path
+                
+                logging.info("📤 Posting to Bluesky...")
+                if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
+                    posted += 1
+                    logging.info("✅ Posted successfully!")
+                
+                # Clean up annotated image if it was created
+                if annotated_path and annotated_path != image_path:
+                    try:
+                        annotated_path.unlink()
+                    except Exception:
+                        pass
             else:
                 # Get YOLO detections for debug info
                 import cv2
@@ -138,6 +205,7 @@ def test_100_images():
     print("=" * 80)
     print(f"Total images tested: {downloaded}")
     print(f"Yellow cars detected: {detected} ({100*detected/max(1, downloaded):.1f}%)")
+    print(f"Posts to Bluesky: {posted}")
     print(f"Download errors: {errors}")
     print("=" * 80 + "\n")
     
@@ -162,6 +230,7 @@ def test_100_images():
         f.write(f"Total Downloaded: {downloaded}\n")
         f.write(f"Yellow Cars Found: {detected}\n")
         f.write(f"Detection Rate: {100*detected/max(1, downloaded):.1f}%\n")
+        f.write(f"Posts to Bluesky: {posted}\n")
         f.write(f"Errors: {errors}\n\n")
         
         f.write("Detailed Results:\n")

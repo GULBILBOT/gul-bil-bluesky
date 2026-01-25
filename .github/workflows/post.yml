@@ -56,10 +56,6 @@ jobs:
 
       - name: Run 100-Image Test with Debug Output
         run: python test_100_images.py
-        continue-on-error: true
-
-      - name: Run Yellow Car Detection Bot
-        run: python src/main.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
