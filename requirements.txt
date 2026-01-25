@@ -2,5 +2,6 @@ requests
 python-dotenv
 atproto
 Pillow
-transformers
-scipy
+ultralytics
+opencv-python
+numpy

@@ -1,4 +1,4 @@
-name: "Yellow Car Bot - Budget Optimized"
+name: "Yellow Car Bot - YOLO26 Powered"
 
 on:
   schedule:
@@ -54,7 +54,11 @@ jobs:
           restore-keys: |
             shuffle-state-v2-
 
-      - name: Run Yellow Car Detection
+      - name: Run 100-Image Test with Debug Output
+        run: python test_100_images.py
+        continue-on-error: true
+
+      - name: Run Yellow Car Detection Bot
         run: python src/main.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
@@ -73,6 +77,16 @@ jobs:
         if: always()
         run: |
           rm -rf today/
+          rm -rf test_100_images/
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yellow-car-test-results-${{ github.run_number }}
+          path: |
+            test_100_results.txt
+          retention-days: 7
 
       - name: Upload session logs (on failure)
         uses: actions/upload-artifact@v4

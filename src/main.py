@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Yellow Car Detection Bot with Hugging Face OWLv2 Fallback
-This version includes Hugging Face OWLv2 as fallback when GitHub Models API is rate limited.
+Yellow Car Detection Bot with YOLO26
+Uses YOLO26 object detection model for detecting yellow cars directly.
 """
 
 import base64
@@ -14,20 +14,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
+import cv2
+import numpy as np
 from PIL import Image
 from atproto import Client, models
 from dotenv import load_dotenv
-import torch
-from transformers import Owlv2Processor, Owlv2ForObjectDetection
+from ultralytics import YOLO
 
 load_dotenv()
-
-TOKEN = os.getenv("KEY_GITHUB_TOKEN")
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")
-ENDPOINT = "https://models.inference.ai.azure.com"
-MODEL_NAME = "gpt-4o"
-
-OWL_V2_MODEL_ID = "google/owlv2-base-patch16-ensemble"
 
 TODAY_FOLDER = Path("today")
 TODAY_FOLDER.mkdir(exist_ok=True)
@@ -41,42 +35,163 @@ IMAGES_PER_SESSION = 30
 YELLOW_THRESHOLD = 150
 MIN_CLUSTER_SIZE = 120
 
+# YOLO26 configuration
+YOLO_MODEL_PATH = "yolo26n.pt"  # Using YOLO26 Nano for speed
+CONF_THRESHOLD = 0.3  # Minimum confidence for car detection
+YELLOW_RATIO_THRESHOLD = 0.15  # Minimum yellow proportion in bounding box
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Global variables for OWLv2 model (load once)
-owl_processor = None
-owl_model = None
-# Global variable to track if Azure is rate limited
-azure_rate_limited = False
+# Global YOLO model (load once)
+yolo_model = None
 
 
-class RateLimitException(Exception):
-    pass
-
-
-def load_owlv2_model():
-    """Load OWLv2 model and processor once at startup"""
-    global owl_processor, owl_model
+def load_yolo_model():
+    """Load YOLO26 model once at startup"""
+    global yolo_model
     
-    if owl_processor is not None and owl_model is not None:
+    if yolo_model is not None:
         return True
-        
-    if not HF_API_TOKEN:
-        logging.error("Hugging Face API token is not defined for OWLv2.")
-        return False
     
     try:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        logging.info(f"Loading OWLv2 model on device: {device}")
-        
-        owl_processor = Owlv2Processor.from_pretrained(OWL_V2_MODEL_ID)
-        owl_model = Owlv2ForObjectDetection.from_pretrained(OWL_V2_MODEL_ID).to(device)
-        
-        logging.info("✅ OWLv2 model loaded successfully")
+        logging.info(f"Loading YOLO26 model from {YOLO_MODEL_PATH}...")
+        yolo_model = YOLO(YOLO_MODEL_PATH)
+        logging.info("✅ YOLO26 model loaded successfully")
         return True
     except Exception as e:
-        logging.error(f"Failed to load OWLv2 model or processor: {e}")
+        logging.error(f"Failed to load YOLO26 model: {e}")
         return False
+
+
+def detect_yellow_car(image_path):
+    """
+    Run YOLO26 on an image and check for 'car' detections with yellow color.
+    Returns dict with detection info: {'detected': bool, 'boxes': [(x1, y1, x2, y2, class_name, conf, yellow_ratio)]}
+    """
+    global yolo_model
+    
+    if yolo_model is None:
+        if not load_yolo_model():
+            return {"detected": False, "boxes": []}
+    
+    try:
+        # Load image with OpenCV
+        img = cv2.imread(str(image_path))
+        if img is None:
+            logging.error(f"Could not load image: {image_path}")
+            return {"detected": False, "boxes": []}
+
+        # Run YOLO26 inference
+        results = yolo_model(img, verbose=False)
+        yellow_boxes = []
+
+        # Parse detections
+        for res in results:
+            for det in res.boxes.data.tolist():
+                x1, y1, x2, y2, conf, cls_id = det
+
+                # Skip low-confidence detections
+                if conf < CONF_THRESHOLD:
+                    continue
+
+                # Check if detected class is a yellow vehicle
+                # Accept: car, bus, truck, van, threewheel
+                # Reject: motorcycle
+                class_name = yolo_model.names[int(cls_id)]
+                if class_name not in ["car", "truck", "bus", "van", "threewheel"]:
+                    continue
+
+                # Crop the bounding box region
+                x1i, y1i, x2i, y2i = map(int, (x1, y1, x2, y2))
+                
+                # Ensure valid crop coordinates
+                h, w = img.shape[:2]
+                x1i, y1i = max(0, x1i), max(0, y1i)
+                x2i, y2i = min(w, x2i), min(h, y2i)
+                
+                if x2i <= x1i or y2i <= y1i:
+                    continue
+                
+                crop = img[y1i:y2i, x1i:x2i]
+
+                # Convert to HSV and count yellow pixels
+                hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                
+                # HSV range for yellow (adjusted for traffic cameras)
+                lower_yellow = np.array([15, 80, 80])
+                upper_yellow = np.array([35, 255, 255])
+                mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
+
+                # Calculate yellow ratio in crop
+                yellow_pixels = (mask > 0).sum()
+                total_pixels = mask.size
+                yellow_ratio = yellow_pixels / (total_pixels + 1e-6)
+                
+                logging.debug(f"Detected {class_name} (conf={conf:.2f}): yellow_ratio={yellow_ratio:.3f}")
+                
+                if yellow_ratio > YELLOW_RATIO_THRESHOLD:
+                    logging.info(f"🟡 Yellow {class_name} detected!")
+                    logging.info(f"   Confidence: {conf:.3f}")
+                    logging.info(f"   Yellow ratio: {yellow_ratio:.3f}")
+                    logging.info(f"   Bounding box: ({x1i},{y1i}) to ({x2i},{y2i})")
+                    yellow_boxes.append((x1i, y1i, x2i, y2i, class_name, conf, yellow_ratio))
+
+        if yellow_boxes:
+            return {"detected": True, "boxes": yellow_boxes}
+        else:
+            return {"detected": False, "boxes": []}
+        
+    except Exception as e:
+        logging.error(f"Error in YOLO26 detection: {e}")
+        return {"detected": False, "boxes": []}
+
+
+def draw_bounding_boxes(image_path, boxes, output_path=None):
+    """
+    Draw bounding boxes on detected yellow vehicles.
+    Args:
+        image_path: Path to original image
+        boxes: List of (x1, y1, x2, y2, class_name, conf, yellow_ratio) tuples
+        output_path: Path to save annotated image (if None, returns modified image)
+    Returns:
+        Path to annotated image or None if failed
+    """
+    try:
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return None
+        
+        # Draw bounding boxes
+        for x1, y1, x2, y2, class_name, conf, yellow_ratio in boxes:
+            # Draw yellow rectangle (bright yellow in BGR: 0, 255, 255)
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 255), 3)
+            
+            # Draw label with class name and confidence
+            label = f"{class_name} {conf:.2f}"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            thickness = 2
+            
+            # Get text size to draw background
+            (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+            
+            # Draw background rectangle for text
+            cv2.rectangle(img, (x1, y1 - text_height - 10), (x1 + text_width + 5, y1), (0, 255, 255), -1)
+            
+            # Draw text
+            cv2.putText(img, label, (x1 + 2, y1 - 5), font, font_scale, (0, 0, 0), thickness)
+        
+        # Save or return the annotated image
+        if output_path is None:
+            output_path = image_path.parent / f"annotated_{image_path.name}"
+        
+        cv2.imwrite(str(output_path), img)
+        logging.debug(f"Saved annotated image to {output_path}")
+        return output_path
+        
+    except Exception as e:
+        logging.error(f"Error drawing bounding boxes: {e}")
+        return None
 
 
 def load_shuffle_state():
@@ -239,245 +354,6 @@ def get_image_data_url(image_file, image_format, max_size=(800, 600), quality=85
         return None
 
 
-def ask_owlv2_if_yellow_car(image_path):
-    """Strict OWLv2 fallback function that avoids false positives from road markings"""
-    global owl_processor, owl_model
-    
-    if owl_processor is None or owl_model is None:
-        if not load_owlv2_model():
-            return None
-
-    try:
-        image = Image.open(image_path).convert("RGB")
-    except Exception as e:
-        logging.error(f"Could not load image for OWLv2: {e}")
-        return None
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    try:
-        # More specific queries to avoid road markings and other yellow objects
-        text_queries = [["a yellow car", "a yellow vehicle", "a yellow automobile", "a yellow taxi"]]
-        logging.info(f"Querying OWLv2 with multiple car-specific prompts")
-
-        inputs = owl_processor(text=text_queries, images=image, return_tensors="pt").to(device)
-
-        with torch.no_grad():
-            outputs = owl_model(**inputs)
-
-        target_sizes = torch.Tensor([image.size[::-1]])  # (H, W)
-
-        # Use higher threshold for initial filtering
-        results = owl_processor.post_process_object_detection(
-            outputs=outputs,
-            target_sizes=target_sizes,
-            threshold=0.25  # Increased from 0.1 to 0.25
-        )
-
-        # Strict validation: require high confidence AND reasonable bounding box
-        if len(results) > 0 and len(results[0]["boxes"]) > 0:
-            boxes = results[0]["boxes"]
-            scores = results[0]["scores"]
-            labels = results[0]["labels"]
-            
-            image_width, image_height = image.size
-            found_yellow_car = False
-            
-            for i, (box, score, label) in enumerate(zip(boxes, scores, labels)):
-                confidence = score.item()
-                
-                # STRICT CONFIDENCE: Require very high confidence
-                if confidence < 0.35:  # Increased from 0.15 to 0.35
-                    continue
-                
-                # BOUNDING BOX VALIDATION: Check if box looks like a car
-                x1, y1, x2, y2 = box.tolist()
-                box_width = x2 - x1
-                box_height = y2 - y1
-                box_area = box_width * box_height
-                image_area = image_width * image_height
-                
-                # Box should be reasonable size (not tiny road markings, not entire image)
-                area_ratio = box_area / image_area
-                aspect_ratio = box_width / box_height if box_height > 0 else 0
-                
-                # Cars typically have aspect ratio between 1.2 and 3.0
-                # And should occupy reasonable portion of image (not tiny markings)
-                if (area_ratio < 0.005 or  # Too small (likely road marking)
-                    area_ratio > 0.8 or    # Too large (likely not a car)
-                    aspect_ratio < 0.8 or  # Too tall (not car-like)
-                    aspect_ratio > 4.0):   # Too wide (likely road marking)
-                    logging.debug(f"Rejected detection: area_ratio={area_ratio:.4f}, aspect_ratio={aspect_ratio:.2f}")
-                    continue
-                
-                # POSITION VALIDATION: Cars are usually not at very bottom (road markings area)
-                bottom_y_ratio = y2 / image_height
-                if bottom_y_ratio > 0.95:  # Very bottom of image (likely road marking)
-                    logging.debug(f"Rejected detection: too close to bottom edge")
-                    continue
-                
-                # If we get here, it's a high-confidence, well-positioned, car-shaped detection
-                label_text = text_queries[0][label.item()]
-                logging.info(f"🟡 HIGH-CONFIDENCE yellow car detected!")
-                logging.info(f"   Label: '{label_text}'")
-                logging.info(f"   Confidence: {confidence:.3f}")
-                logging.info(f"   Box area ratio: {area_ratio:.4f}")
-                logging.info(f"   Aspect ratio: {aspect_ratio:.2f}")
-                logging.info(f"   Position: ({x1:.0f},{y1:.0f}) to ({x2:.0f},{y2:.0f})")
-                
-                found_yellow_car = True
-                break
-            
-            if found_yellow_car:
-                logging.info(f"🟡 OWLv2 CONFIRMED yellow car with strict validation!")
-                return "yes"
-            else:
-                logging.info(f"🚫 OWLv2 detections failed strict validation (likely road markings/false positives)")
-                return "no"
-        else:
-            logging.info(f"🚫 OWLv2 found no yellow cars above threshold.")
-            return "no"
-            
-    except Exception as e:
-        logging.error(f"Error in OWLv2 processing: {e}")
-        return None
-
-
-def ask_ai_if_yellow_car(image_path):
-    global azure_rate_limited
-    fallback_triggered = False
-    
-    # Check if Azure is already rate limited
-    if azure_rate_limited:
-        logging.info("🔄 Azure previously rate limited - using OWLv2 fallback directly")
-        fallback_triggered = True
-        return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-    
-    if not TOKEN:
-        logging.error("Azure API token is not defined")
-        fallback_triggered = True
-        return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-
-    image_data_url = get_image_data_url(image_path, "jpg", max_size=(800, 600), quality=85)
-    if not image_data_url:
-        return None, fallback_triggered
-
-    headers = {
-        "Authorization": f"Bearer {TOKEN}",
-        "Content-Type": "application/json"
-    }
-    body = {
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Does this image show a yellow car? Answer with only 'yes' or 'no'."
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": image_data_url,
-                            "detail": "low"  # Use low detail to reduce payload size
-                        }
-                    }
-                ]
-            }
-        ],
-        "model": MODEL_NAME,
-        "max_tokens": 10
-    }
-
-    try:
-        resp = requests.post(f"{ENDPOINT}/chat/completions", json=body, headers=headers, timeout=30)
-
-        if resp.status_code == 413:
-            logging.warning("🚫 Payload too large (413) - trying with smaller image...")
-            # Try with much smaller image
-            smaller_image_url = get_image_data_url(image_path, "jpg", max_size=(400, 300), quality=70)
-            if smaller_image_url:
-                body["messages"][0]["content"][1]["image_url"]["url"] = smaller_image_url
-                resp = requests.post(f"{ENDPOINT}/chat/completions", json=body, headers=headers, timeout=30)
-                
-                if resp.status_code == 413:
-                    logging.error("Image still too large even after aggressive compression - switching to OWLv2")
-                    fallback_triggered = True
-                    return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-                elif resp.status_code == 429:
-                    # Rate limited - mark Azure as unavailable and use fallback
-                    azure_rate_limited = True
-                    quota_remaining = resp.headers.get("x-ms-user-quota-remaining", "unknown")
-                    quota_resets_after = resp.headers.get("x-ms-user-quota-resets-after", "unknown")
-                    logging.warning("🚫 Rate limit hit (429) after resize - marking Azure as unavailable:")
-                    logging.warning(f"   Azure will be bypassed for remainder of session")
-                    logging.warning(f"   Quota remaining: {quota_remaining}")
-                    logging.warning(f"   Quota resets after: {quota_resets_after}")
-                    fallback_triggered = True
-                    return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-                elif resp.status_code != 200:
-                    logging.error(f"Azure API error after resize: {resp.status_code}")
-                    fallback_triggered = True
-                    return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-                else:
-                    # Success with smaller image
-                    data = resp.json()
-                    result = data["choices"][0]["message"]["content"].strip().lower()
-                    logging.info(f"✅ Azure AI response (resized): {result}")
-                    return result, fallback_triggered
-            else:
-                logging.error("Could not create smaller image - switching to OWLv2")
-                fallback_triggered = True
-                return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-
-        if resp.status_code == 429:
-            # Rate limited - mark Azure as unavailable for rest of session
-            azure_rate_limited = True
-            quota_remaining = resp.headers.get("x-ms-user-quota-remaining", "unknown")
-            quota_resets_after = resp.headers.get("x-ms-user-quota-resets-after", "unknown")
-
-            logging.warning("🚫 Rate limit hit (429) - marking Azure as unavailable:")
-            logging.warning(f"   Azure will be bypassed for remainder of session")
-            logging.warning(f"   Quota remaining: {quota_remaining}")
-            logging.warning(f"   Quota resets after: {quota_resets_after}")
-
-            try:
-                reset_time = datetime.fromisoformat(quota_resets_after.replace('Z', '+00:00'))
-                current_time = datetime.now(reset_time.tzinfo)
-                time_until_reset = reset_time - current_time
-
-                if time_until_reset.total_seconds() > 0:
-                    minutes = int(time_until_reset.total_seconds() / 60)
-                    seconds = int(time_until_reset.total_seconds() % 60)
-                    logging.warning(f"   Time until quota reset: {minutes}m {seconds}s")
-                else:
-                    logging.warning("   Quota should be available now")
-            except Exception as e:
-                logging.debug(f"Could not parse reset time: {e}")
-
-            logging.info("🔄 Switching to OWLv2 model for remainder of session...")
-            fallback_triggered = True
-            return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-
-        if resp.status_code != 200:
-            logging.error(f"Azure API error: {resp.status_code}")
-            logging.debug(f"Response headers: {dict(resp.headers)}")
-            logging.info("🔄 Trying OWLv2 fallback due to Azure error...")
-            fallback_triggered = True
-            return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-
-        data = resp.json()
-        result = data["choices"][0]["message"]["content"].strip().lower()
-        logging.info(f"✅ Azure AI response: {result}")
-        return result, fallback_triggered
-
-    except Exception as e:
-        logging.error(f"Error calling Azure AI endpoint: {e}")
-        logging.info("🔄 Trying OWLv2 fallback due to Azure error...")
-        fallback_triggered = True
-        return ask_owlv2_if_yellow_car(image_path), fallback_triggered
-
-
 def post_to_bluesky(image_path, alt_text):
     if not BSKY_HANDLE or not BSKY_PASSWORD:
         logging.error("Bluesky credentials not defined")
@@ -521,20 +397,12 @@ def main():
     start_time = datetime.now()
     max_end_time = start_time + timedelta(minutes=MAX_RUNTIME_MINUTES)
 
-    logging.info(f"Starting Yellow Car Bot - will run for max {MAX_RUNTIME_MINUTES} minutes")
+    logging.info(f"Starting Yellow Car Bot with YOLO26 - will run for max {MAX_RUNTIME_MINUTES} minutes")
 
-    # Reset Azure rate limit status at start of each session
-    global azure_rate_limited
-    azure_rate_limited = False
-
-    # Pre-load OWLv2 model if HF token is available
-    if HF_API_TOKEN:
-        if load_owlv2_model():
-            logging.info("✅ Hugging Face OWLv2 fallback ready")
-        else:
-            logging.warning("⚠️  Failed to load OWLv2 - fallback not available")
-    else:
-        logging.warning("⚠️  No Hugging Face token - fallback not available")
+    # Pre-load YOLO26 model
+    if not load_yolo_model():
+        logging.error("Failed to load YOLO26 model - exiting")
+        return
 
     urls, current_index, current_stats = get_shuffled_urls()
     if not urls:
@@ -543,18 +411,11 @@ def main():
 
     logging.info(f"Resuming from position {current_index}/{len(urls)}")
     logging.info(f"All-time stats: {current_stats.get('total_processed', 0)} processed, {current_stats.get('total_posted', 0)} posted")
-    
-    if azure_rate_limited:
-        logging.info("⚠️  Azure API bypassed due to previous rate limiting")
-    elif TOKEN:
-        logging.info("✅ Azure API available")
-    else:
-        logging.info("⚠️  No Azure API token - using OWLv2 only")
+    logging.info("✅ YOLO26 model ready for detection")
 
     session_processed = 0
     session_yellow_found = 0
     session_posted = 0
-    fallback_used = 0
     final_index = 0
 
     try:
@@ -575,20 +436,29 @@ def main():
 
             session_processed += 1
 
-            if find_yellow_clusters(image_path):
+            # Run YOLO26 detection directly (pre-filter removed for better recall)
+            logging.info(f"🔍 Running YOLO26 detection...")
+            detection_result = detect_yellow_car(image_path)
+            logging.info(f"YOLO26 detection result: {detection_result}")
+
+            if detection_result["detected"]:
                 session_yellow_found += 1
-                logging.info(f"🟡 Yellow cluster detected! Checking with AI...")
-
-                ai_response, was_fallback_used = ask_ai_if_yellow_car(image_path)
-                logging.info(f"AI response: {ai_response}")
-                if was_fallback_used:
-                    fallback_used += 1
-
-                if ai_response and "yes" in ai_response:
-                    logging.info("🚗 YELLOW CAR CONFIRMED! Posting to Bluesky...")
-                    if post_to_bluesky(image_path, alt_text="Yellow car spotted on traffic camera!"):
-                        session_posted += 1
-                        logging.info("✅ Posted to Bluesky successfully!")
+                
+                # Draw bounding boxes on the image
+                annotated_path = draw_bounding_boxes(image_path, detection_result["boxes"])
+                image_to_post = annotated_path if annotated_path else image_path
+                
+                logging.info("🚗 YELLOW CAR CONFIRMED! Posting to Bluesky...")
+                if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera!"):
+                    session_posted += 1
+                    logging.info("✅ Posted to Bluesky successfully!")
+                
+                # Clean up annotated image if it was created
+                if annotated_path and annotated_path != image_path:
+                    try:
+                        annotated_path.unlink()
+                    except:
+                        pass
 
             try:
                 image_path.unlink()
@@ -620,8 +490,6 @@ def main():
     logging.info(f"Images processed: {session_processed}")
     logging.info(f"Yellow clusters found: {session_yellow_found}")
     logging.info(f"Cars posted: {session_posted}")
-    if fallback_used > 0:
-        logging.info(f"OWLv2 fallbacks used: {fallback_used}")
     logging.info(f"Progress: {final_index}/{len(urls)}")
     logging.info(f"All-time totals: {updated_stats.get('total_processed', 0)} processed, {updated_stats.get('total_posted', 0)} posted")
 

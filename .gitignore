@@ -42,6 +42,10 @@ build/Release
 node_modules/
 jspm_packages/
 
+# Python cache
+__pycache__/
+*.pyc
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -133,3 +137,4 @@ dist
 
 # testing locally
 today/
+.DS_Store
