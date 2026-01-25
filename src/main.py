@@ -444,11 +444,10 @@ def main():
             # Download image (mirror the simple stdout progress from the test script)
             print(f"[{i+1:3d}/{len(urls)}] ", end="", flush=True)
             if not download_image(url, image_path):
-                print("❌ Download failed")
+                print("⊘ Skipped (invalid response)")
                 continue
 
             print("✓ Downloaded ", end="", flush=True)
-            session_processed += 1
 
             # Run YOLO26 detection
             try:
@@ -456,6 +455,8 @@ def main():
             except Exception as e:
                 print(f"❌ Detection error: {e}")
                 continue
+
+            session_processed += 1
 
             if detection_result["detected"]:
                 session_yellow_found += 1
