@@ -25,10 +25,12 @@ from ultralytics import YOLO
 
 load_dotenv()
 
-TODAY_FOLDER = Path("today")
+# Get the project root directory (parent of src folder)
+PROJECT_ROOT = Path(__file__).parent.parent
+TODAY_FOLDER = PROJECT_ROOT / "today"
 TODAY_FOLDER.mkdir(exist_ok=True)
-WEBCAM_URLS_FILE = Path("valid_webcam_ids.txt")
-SHUFFLE_STATE_FILE = Path("shuffle_state.json")
+WEBCAM_URLS_FILE = PROJECT_ROOT / "valid_webcam_ids.txt"
+SHUFFLE_STATE_FILE = PROJECT_ROOT / "shuffle_state.json"
 BSKY_HANDLE = os.getenv("BSKY_HANDLE")
 BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
 
