@@ -286,6 +286,11 @@ def download_image(url, dest, timeout=10):
             dest.unlink()
             return False
         
+        # Log file details for debugging
+        with open(dest, "rb") as f:
+            header = f.read(16)
+        logging.debug(f"Downloaded {dest.name}: {file_size} bytes, header: {header[:8].hex()}")
+        
         return True
         
     except Exception as e:
