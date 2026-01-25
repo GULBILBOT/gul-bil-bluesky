@@ -33,7 +33,7 @@ BSKY_HANDLE = os.getenv("BSKY_HANDLE")
 BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
 
 MAX_RUNTIME_MINUTES = 20
-IMAGES_PER_SESSION = 30
+IMAGES_PER_SESSION = 100
 
 # YOLO26 configuration
 YOLO_MODEL_PATH = "yolo26n.pt"  # Using YOLO26 Nano for speed
@@ -369,6 +369,7 @@ def main():
     final_index = current_index
 
     try:
+        # Use the same straightforward progress style as test_100_images.py
         for i in range(current_index, min(current_index + IMAGES_PER_SESSION, len(urls))):
             if datetime.now() >= max_end_time:
                 logging.info("Time limit reached, stopping gracefully")
@@ -379,44 +380,70 @@ def main():
             image_name = f"cam_{i + 1}_{timestamp}.jpg"
             image_path = TODAY_FOLDER / image_name
 
-            # Download image (logging module does not support stream-style params)
-            logging.info(f"[{i+1:3d}/{len(urls)}] Downloading")
+            # Download image (mirror the simple stdout progress from the test script)
+            print(f"[{i+1:3d}/{len(urls)}] ", end="", flush=True)
             if not download_image(url, image_path):
-                logging.info("❌ Download failed")
+                print("❌ Download failed")
                 continue
 
-            logging.info("✓ Downloaded")
+            print("✓ Downloaded ", end="", flush=True)
             session_processed += 1
 
             # Run YOLO26 detection
-            detection_result = detect_yellow_car(image_path)
+            try:
+                detection_result = detect_yellow_car(image_path)
+            except Exception as e:
+                print(f"❌ Detection error: {e}")
+                continue
 
             if detection_result["detected"]:
                 session_yellow_found += 1
-                logging.info(f"🟡 Yellow car detected!")
-                
+                vehicle_types = ", ".join(sorted(set(box[4] for box in detection_result["boxes"]))) or "vehicle"
+                num_boxes = len(detection_result["boxes"])
+                print(f"→ YELLOW {vehicle_types.upper()} FOUND ({num_boxes} vehicle(s))")
+
                 # Draw bounding boxes on the image
                 annotated_path = draw_bounding_boxes(image_path, detection_result["boxes"])
                 image_to_post = annotated_path if annotated_path else image_path
-                
+
                 logging.info("📤 Posting to Bluesky...")
                 if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
                     session_posted += 1
                     logging.info("✅ Posted successfully!")
-                
+
                 # Clean up annotated image if it was created
                 if annotated_path and annotated_path != image_path:
                     try:
                         annotated_path.unlink()
-                    except:
+                    except Exception:
                         pass
             else:
-                logging.info("→ No yellow car")
+                # Mirror the debug output style from test_100_images.py
+                try:
+                    img = cv2.imread(str(image_path))
+                    if img is not None:
+                        yolo_results = yolo_model(img, verbose=False)
+                        vehicle_types = []
+                        for res in yolo_results:
+                            for det in res.boxes.data.tolist():
+                                x1, y1, x2, y2, conf, cls_id = det
+                                class_name = yolo_model.names[int(cls_id)]
+                                if class_name in ["car", "truck", "bus", "van", "threewheel"]:
+                                    vehicle_types.append(f"{class_name}({conf:.2f})")
+
+                        if vehicle_types:
+                            print(f"→ No yellow car (found: {', '.join(vehicle_types)})")
+                        else:
+                            print("→ No yellow car (no vehicles detected)")
+                    else:
+                        print("→ No yellow car")
+                except Exception as e:
+                    print(f"→ No yellow car (debug error: {e})")
 
             # Clean up downloaded image
             try:
                 image_path.unlink()
-            except:
+            except Exception:
                 pass
 
             time.sleep(0.5)
