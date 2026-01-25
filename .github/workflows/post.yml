@@ -54,10 +54,6 @@ jobs:
           restore-keys: |
             shuffle-state-v2-
 
-      - name: Run 100-Image Test with Debug Output
-        run: python test_100_images.py
-        continue-on-error: true
-
       - name: Run Yellow Car Detection Bot
         run: python src/main.py
         env:
