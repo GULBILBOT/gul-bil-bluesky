@@ -379,13 +379,13 @@ def main():
             image_name = f"cam_{i + 1}_{timestamp}.jpg"
             image_path = TODAY_FOLDER / image_name
 
-            # Download image
-            logging.info(f"[{i+1:3d}/{len(urls)}] ", end="", flush=True)
+            # Download image (logging module does not support stream-style params)
+            logging.info(f"[{i+1:3d}/{len(urls)}] Downloading")
             if not download_image(url, image_path):
                 logging.info("❌ Download failed")
                 continue
 
-            logging.info("✓ Downloaded", flush=True)
+            logging.info("✓ Downloaded")
             session_processed += 1
 
             # Run YOLO26 detection
