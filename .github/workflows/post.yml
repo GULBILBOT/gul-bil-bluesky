@@ -36,8 +36,8 @@ jobs:
       - name: Install dependencies
         run: |
           # Install CPU-only PyTorch first (much smaller, ~200MB vs 3GB+)
-          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-          uv pip sync --python-preference only-managed
+          uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip sync --system --python-preference only-managed
 
       - name: Run 100-Image Test with Debug Output
         run: python test_100_images.py
