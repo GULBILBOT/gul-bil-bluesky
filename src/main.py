@@ -250,16 +250,50 @@ def update_shuffle_state(new_index, stats_update=None):
 
 def download_image(url, dest, timeout=10):
     try:
-        resp = requests.get(url, allow_redirects=True, timeout=timeout)
-        if resp.status_code == 200:
-            with open(dest, "wb") as f:
-                f.write(resp.content)
-            return True
-        else:
+        resp = requests.get(url, allow_redirects=True, timeout=timeout, stream=True)
+        if resp.status_code != 200:
             logging.debug(f"Failed to download {url}: Status {resp.status_code}")
             return False
+        
+        # Verify we have content before writing
+        if not resp.content or len(resp.content) == 0:
+            logging.debug(f"Empty response from {url}")
+            return False
+        
+        # Check Content-Length header if available
+        content_length = resp.headers.get('content-length')
+        if content_length and int(content_length) == 0:
+            logging.debug(f"Content-Length is 0 for {url}")
+            return False
+        
+        # Ensure parent directory exists
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Write file
+        with open(dest, "wb") as f:
+            f.write(resp.content)
+        
+        # Verify file was written
+        if not dest.exists():
+            logging.debug(f"File not created: {dest}")
+            return False
+        
+        file_size = dest.stat().st_size
+        if file_size == 0:
+            logging.debug(f"File is empty after write: {dest}")
+            dest.unlink()
+            return False
+        
+        return True
+        
     except Exception as e:
         logging.debug(f"Exception downloading {url}: {e}")
+        # Clean up partial file if it exists
+        if dest.exists():
+            try:
+                dest.unlink()
+            except:
+                pass
         return False
 
 
