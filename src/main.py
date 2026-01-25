@@ -448,6 +448,7 @@ def main():
                 continue
 
             print("✓ Downloaded ", end="", flush=True)
+            session_processed += 1
 
             # Run YOLO26 detection
             try:
@@ -455,8 +456,6 @@ def main():
             except Exception as e:
                 print(f"❌ Detection error: {e}")
                 continue
-
-            session_processed += 1
 
             if detection_result["detected"]:
                 session_yellow_found += 1
