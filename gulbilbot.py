@@ -299,6 +299,67 @@ def load_webcam_urls():
     return urls
 
 
+def verify_with_gpt4o(image_path):
+    """Verify yellow car detection with GPT-4o before posting to Bluesky"""
+    token = os.getenv("KEY_GITHUB_TOKEN")
+    
+    if not token:
+        logging.warning("GitHub token not available - skipping GPT-4o verification")
+        return None
+    
+    try:
+        image_data_url = get_image_data_url(image_path, "jpg", max_size=(800, 600), quality=85)
+        if not image_data_url:
+            logging.error("Could not prepare image for GPT-4o verification")
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Does this image show a YELLOW CAR or YELLOW VEHICLE? Answer with only 'yes' or 'no'. Be strict - reject road markings, yellow signs, or anything that isn't an actual yellow car/vehicle."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_data_url,
+                                "detail": "low"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "model": "gpt-4o",
+            "max_tokens": 10
+        }
+        
+        endpoint = "https://models.inference.ai.azure.com"
+        resp = requests.post(f"{endpoint}/chat/completions", json=body, headers=headers, timeout=30)
+        
+        if resp.status_code != 200:
+            logging.warning(f"GPT-4o verification failed with status {resp.status_code}")
+            # If GPT-4o fails, log but don't block posting (YOLO26 already checked)
+            return None
+        
+        data = resp.json()
+        result = data["choices"][0]["message"]["content"].strip().lower()
+        logging.info(f"✅ GPT-4o verification response: {result}")
+        
+        return "yes" in result
+        
+    except Exception as e:
+        logging.warning(f"Error verifying with GPT-4o: {e}")
+        return None
+
+
 def post_to_bluesky(image_path, alt_text):
     """Post image to Bluesky with alt text"""
     if not BSKY_HANDLE or not BSKY_PASSWORD:
@@ -405,21 +466,33 @@ def gulbilbot():
                 vehicle_types = ", ".join(set(box[4] for box in result["boxes"]))
                 print(f"→ YELLOW {vehicle_types.upper()} FOUND ({num_boxes} vehicle(s))")
                 
-                # Draw bounding boxes and post to Bluesky
-                annotated_path = draw_bounding_boxes(image_path, result["boxes"])
-                image_to_post = annotated_path if annotated_path else image_path
+                # Verify with GPT-4o before posting
+                logging.info("🔍 Verifying with GPT-4o before posting...")
+                gpt4o_confirmed = verify_with_gpt4o(image_path)
                 
-                logging.info("📤 Posting to Bluesky...")
-                if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
-                    posted += 1
-                    logging.info("✅ Posted successfully!")
-                
-                # Clean up annotated image if it was created
-                if annotated_path and annotated_path != image_path:
-                    try:
-                        annotated_path.unlink()
-                    except Exception:
-                        pass
+                if gpt4o_confirmed is False:
+                    logging.warning("❌ GPT-4o rejected detection - NOT posting (likely false positive)")
+                    print("→ REJECTED by GPT-4o (false positive)")
+                elif gpt4o_confirmed is True:
+                    logging.info("✅ GPT-4o CONFIRMED yellow car - proceeding to post")
+                    # Draw bounding boxes and post to Bluesky
+                    annotated_path = draw_bounding_boxes(image_path, result["boxes"])
+                    image_to_post = annotated_path if annotated_path else image_path
+                    
+                    logging.info("📤 Posting to Bluesky...")
+                    if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
+                        posted += 1
+                        logging.info("✅ Posted successfully!")
+                    
+                    # Clean up annotated image if it was created
+                    if annotated_path and annotated_path != image_path:
+                        try:
+                            annotated_path.unlink()
+                        except Exception:
+                            pass
+                else:
+                    logging.warning("⚠️  GPT-4o verification failed - skipping post to be safe")
+                    print("→ GPT-4o verification failed")
             else:
                 # Get YOLO detections for debug info
                 img = cv2.imread(str(image_path))
