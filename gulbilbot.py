@@ -327,10 +327,10 @@ def post_to_bluesky(image_path, alt_text):
         return False
 
 def gulbilbot():
-    """Download and test 300 random webcam images for yellow car detection"""
+    """Download and test all available webcam images for yellow car detection"""
     
     print("\n" + "=" * 80)
-    print("YELLOW CAR DETECTION - 300 IMAGE TEST")
+    print("YELLOW CAR DETECTION - FULL SCAN")
     print("=" * 80 + "\n")
     
     # Load URLs
@@ -340,10 +340,10 @@ def gulbilbot():
         return
     
     logging.info(f"Loaded {len(urls)} webcam URLs")
-    logging.info("Selecting 300 random images...")
+    logging.info("Processing all available images...")
     
-    # Select 300 random URLs
-    test_urls = random.sample(urls, min(300, len(urls)))
+    # Process all URLs
+    test_urls = urls
     logging.info(f"Selected {len(test_urls)} URLs for testing\n")
     
     # Load YOLO26 model
@@ -366,10 +366,15 @@ def gulbilbot():
         image_name = f"test_{idx:03d}.jpg"
         image_path = TEST_IMAGES_FOLDER / image_name
         
+        # Extract webcam ID from URL for logging
+        webcam_id = url.split('/images/')[-1] if '/images/' in url else url
+        
         # Download image
-        print(f"[{idx:3d}/300] ", end="", flush=True)
+        total = len(test_urls)
+        print(f"[{idx:3d}/{total}] ", end="", flush=True)
         
         if not download_image(url, image_path):
+            logging.info(f"Download failed for webcam ID: {webcam_id}")
             print("❌ Download failed")
             errors += 1
             continue
@@ -426,6 +431,7 @@ def gulbilbot():
             results.append({
                 'image': image_name,
                 'url': url,
+                'webcam_id': webcam_id,
                 'detected': is_yellow,
                 'boxes': num_boxes
             })
@@ -442,7 +448,7 @@ def gulbilbot():
     
     # Summary
     print("\n" + "=" * 80)
-    print("TEST SUMMARY - 300 IMAGES")
+    print(f"TEST SUMMARY - {downloaded} IMAGES PROCESSED")
     print("=" * 80)
     print(f"Total images tested: {downloaded}")
     print(f"Yellow cars detected: {detected} ({100*detected/max(1, downloaded):.1f}%)")
@@ -465,7 +471,7 @@ def gulbilbot():
     # Save detailed results
     results_file = Path("test_results.txt")
     with open(results_file, 'w') as f:
-        f.write("Yellow Car Detection - 300 Image Test Results\n")
+        f.write("Yellow Car Detection - Full Scan Results\n")
         f.write("=" * 80 + "\n\n")
         f.write(f"Test Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Total Downloaded: {downloaded}\n")
@@ -478,7 +484,7 @@ def gulbilbot():
         f.write("-" * 80 + "\n")
         for r in results:
             status = "✓ YES" if r['detected'] else "✗ NO"
-            f.write(f"{r['image']:<20} {status:<10} ({r['boxes']} vehicles)\n")
+            f.write(f"{r['image']:<20} {status:<10} ({r['boxes']} vehicles) - ID: {r['webcam_id']}\n")
     
     logging.info(f"Results saved to: {results_file}\n")
     
