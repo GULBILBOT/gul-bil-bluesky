@@ -32,12 +32,10 @@ BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
 
 MAX_RUNTIME_MINUTES = 20
 IMAGES_PER_SESSION = 30
-YELLOW_THRESHOLD = 150
-MIN_CLUSTER_SIZE = 120
 
 # YOLO26 configuration
 YOLO_MODEL_PATH = "yolo26n.pt"  # Using YOLO26 Nano for speed
-CONF_THRESHOLD = 0.3  # Minimum confidence for car detection
+CONF_THRESHOLD = 0.3  # Minimum confidence for vehicle detection
 YELLOW_RATIO_THRESHOLD = 0.15  # Minimum yellow proportion in bounding box
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -263,60 +261,7 @@ def download_image(url, dest, timeout=10):
         return False
 
 
-def find_yellow_clusters(image_path, min_cluster_size=MIN_CLUSTER_SIZE):
-    try:
-        img = Image.open(image_path).convert('RGB')
-        pixels = img.load()
-        width, height = img.size
-        yellow_count = 0
-        
-        # Track yellow pixel positions to check for rectangular clustering
-        yellow_pixels = []
 
-        for y in range(0, height, 2):
-            for x in range(0, width, 2):
-                r, g, b = pixels[x, y]
-                if r > YELLOW_THRESHOLD and g > YELLOW_THRESHOLD and b < 100:
-                    yellow_count += 1
-                    yellow_pixels.append((x, y))
-                    
-                    # Early exit if we have enough pixels
-                    if yellow_count >= min_cluster_size:
-                        # Additional validation: check if yellow pixels form reasonable clusters
-                        # (not just scattered road markings)
-                        if len(yellow_pixels) >= min_cluster_size:
-                            # Check for clustered distribution (not just thin lines)
-                            x_coords = [p[0] for p in yellow_pixels[-min_cluster_size:]]
-                            y_coords = [p[1] for p in yellow_pixels[-min_cluster_size:]]
-                            
-                            x_range = max(x_coords) - min(x_coords)
-                            y_range = max(y_coords) - min(y_coords)
-                            
-                            # Require both width and height (not just thin lines)
-                            # Road markings are typically very thin in one dimension
-                            if x_range > 20 and y_range > 15:  # Minimum rectangular area
-                                logging.debug(f"Yellow cluster found: {yellow_count} pixels, dimensions: {x_range}x{y_range}")
-                                return True
-
-        # Final check with all pixels if we didn't early exit
-        if yellow_count >= min_cluster_size and len(yellow_pixels) >= min_cluster_size:
-            x_coords = [p[0] for p in yellow_pixels]
-            y_coords = [p[1] for p in yellow_pixels]
-            
-            x_range = max(x_coords) - min(x_coords)
-            y_range = max(y_coords) - min(y_coords)
-            
-            # Require rectangular distribution
-            if x_range > 20 and y_range > 15:
-                logging.debug(f"Final yellow cluster found: {yellow_count} pixels, dimensions: {x_range}x{y_range}")
-                return True
-            else:
-                logging.debug(f"Yellow pixels too linear: {yellow_count} pixels, dimensions: {x_range}x{y_range}")
-
-        return False
-    except Exception as e:
-        logging.debug(f"Error processing {image_path}: {e}")
-        return False
 
 
 def get_image_data_url(image_file, image_format, max_size=(800, 600), quality=85):
@@ -394,10 +339,13 @@ def post_to_bluesky(image_path, alt_text):
 
 
 def main():
+    """Main bot loop - download images and detect yellow cars"""
     start_time = datetime.now()
     max_end_time = start_time + timedelta(minutes=MAX_RUNTIME_MINUTES)
 
-    logging.info(f"Starting Yellow Car Bot with YOLO26 - will run for max {MAX_RUNTIME_MINUTES} minutes")
+    logging.info(f"Starting Yellow Car Bot with YOLO26")
+    logging.info(f"Max runtime: {MAX_RUNTIME_MINUTES} minutes")
+    logging.info(f"Images per session: {IMAGES_PER_SESSION}")
 
     # Pre-load YOLO26 model
     if not load_yolo_model():
@@ -409,14 +357,14 @@ def main():
         logging.error("No URLs available")
         return
 
+    logging.info(f"Loaded {len(urls)} webcam URLs")
     logging.info(f"Resuming from position {current_index}/{len(urls)}")
     logging.info(f"All-time stats: {current_stats.get('total_processed', 0)} processed, {current_stats.get('total_posted', 0)} posted")
-    logging.info("✅ YOLO26 model ready for detection")
 
     session_processed = 0
     session_yellow_found = 0
     session_posted = 0
-    final_index = 0
+    final_index = current_index
 
     try:
         for i in range(current_index, min(current_index + IMAGES_PER_SESSION, len(urls))):
@@ -429,29 +377,30 @@ def main():
             image_name = f"cam_{i + 1}_{timestamp}.jpg"
             image_path = TODAY_FOLDER / image_name
 
-            logging.info(f"Processing {i + 1}/{len(urls)}: downloading image...")
-
+            # Download image
+            logging.info(f"[{i+1:3d}/{len(urls)}] ", end="", flush=True)
             if not download_image(url, image_path):
+                logging.info("❌ Download failed")
                 continue
 
+            logging.info("✓ Downloaded", flush=True)
             session_processed += 1
 
-            # Run YOLO26 detection directly (pre-filter removed for better recall)
-            logging.info(f"🔍 Running YOLO26 detection...")
+            # Run YOLO26 detection
             detection_result = detect_yellow_car(image_path)
-            logging.info(f"YOLO26 detection result: {detection_result}")
 
             if detection_result["detected"]:
                 session_yellow_found += 1
+                logging.info(f"🟡 Yellow car detected!")
                 
                 # Draw bounding boxes on the image
                 annotated_path = draw_bounding_boxes(image_path, detection_result["boxes"])
                 image_to_post = annotated_path if annotated_path else image_path
                 
-                logging.info("🚗 YELLOW CAR CONFIRMED! Posting to Bluesky...")
-                if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera!"):
+                logging.info("📤 Posting to Bluesky...")
+                if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
                     session_posted += 1
-                    logging.info("✅ Posted to Bluesky successfully!")
+                    logging.info("✅ Posted successfully!")
                 
                 # Clean up annotated image if it was created
                 if annotated_path and annotated_path != image_path:
@@ -459,13 +408,16 @@ def main():
                         annotated_path.unlink()
                     except:
                         pass
+            else:
+                logging.info("→ No yellow car")
 
+            # Clean up downloaded image
             try:
                 image_path.unlink()
             except:
                 pass
 
-            time.sleep(1)
+            time.sleep(0.5)
 
         final_index = min(current_index + session_processed, len(urls))
         stats_update = {
@@ -475,23 +427,29 @@ def main():
         update_shuffle_state(final_index, stats_update)
 
     except KeyboardInterrupt:
-        logging.info("Interrupted, saving progress...")
+        logging.info("\n⏸️  Interrupted, saving progress...")
         final_index = current_index + session_processed
         stats_update = {"total_processed": session_processed, "total_posted": session_posted}
         update_shuffle_state(final_index, stats_update)
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+        logging.error(f"Unexpected error in main loop: {e}")
+        import traceback
+        traceback.print_exc()
 
+    # Summary
     runtime = datetime.now() - start_time
     updated_stats = load_shuffle_state().get("stats", {})
 
-    logging.info(f"\n=== SESSION SUMMARY ===")
+    logging.info("\n" + "=" * 80)
+    logging.info("SESSION SUMMARY")
+    logging.info("=" * 80)
     logging.info(f"Runtime: {runtime.total_seconds():.1f} seconds")
     logging.info(f"Images processed: {session_processed}")
-    logging.info(f"Yellow clusters found: {session_yellow_found}")
-    logging.info(f"Cars posted: {session_posted}")
+    logging.info(f"Yellow cars detected: {session_yellow_found}")
+    logging.info(f"Posts to Bluesky: {session_posted}")
     logging.info(f"Progress: {final_index}/{len(urls)}")
     logging.info(f"All-time totals: {updated_stats.get('total_processed', 0)} processed, {updated_stats.get('total_posted', 0)} posted")
+    logging.info("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
