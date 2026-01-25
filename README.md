@@ -96,7 +96,7 @@ Each run tracks:
 - Yellow cars detected
 - Successful Bluesky posts
 - Processing time
-- Results saved to `test_100_results.txt`
+- Results saved to `test_results.txt`
 
 ## Yellow Detection Algorithm
 
