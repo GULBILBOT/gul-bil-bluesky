@@ -24,8 +24,8 @@ An automated bot that monitors Norwegian traffic cameras for yellow cars and pos
 ### 1. Repository Structure
 ```
 your-repo/
-├── test_100_images.py
-├── requirements.txt
+├── gulbilbot.py
+├── pyproject.toml
 ├── valid_webcam_ids.txt
 ├── .github/
 │   └── workflows/
@@ -35,7 +35,7 @@ your-repo/
 
 ### 2. Required Files
 
-**requirements.txt**:
+**pyproject.toml**:
 ```txt
 requests
 python-dotenv
@@ -68,7 +68,7 @@ Note: No API tokens required! YOLO26 runs locally on GitHub Actions runners.
 
 ## Configuration
 
-Edit these variables in `test_100_images.py`:
+Edit these variables in `gulbilbot.py`:
 
 ```python
 CONF_THRESHOLD = 0.3          # YOLO26 vehicle detection confidence (lower = more sensitive)
@@ -85,9 +85,9 @@ The bot runs **3 times per day**:
 - 2:00 PM UTC
 - 10:00 PM UTC
 
-**Budget**: ~20 minutes/day, ~600 minutes/month (well within 2000 limit)
+**Budget**: ~60 minutes/day, ~1800 minutes/month (within 2000 limit)
 
-**Coverage**: 100 random cameras per run, all 814 cameras covered every ~8 runs
+**Coverage**: 300 random cameras per run, all 814 cameras covered every ~3 runs
 
 ## Statistics
 
@@ -153,11 +153,11 @@ Trigger a manual run:
 
 ## File Descriptions
 
-- **`test_100_images.py`**: Main bot script (downloads 100 random images, detects yellow cars, posts to Bluesky)
-- **`requirements.txt`**: Python dependencies
+- **`gulbilbot.py`**: Main bot script (downloads 300 random images, detects yellow cars, posts to Bluesky)
+- **`pyproject.toml`**: Python dependencies
 - **`valid_webcam_ids.txt`**: List of 814 traffic camera URLs
 - **`.github/workflows/post.yml`**: GitHub Actions workflow (runs 3x daily)
-- **`test_100_results.txt`**: Results from latest run (auto-generated)
+- **`test_results.txt`**: Results from latest run (auto-generated)
 
 ## Privacy & Ethics
 

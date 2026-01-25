@@ -40,8 +40,8 @@ jobs:
           # Install all other dependencies from pyproject.toml
           uv pip install --system requests python-dotenv atproto Pillow ultralytics opencv-python numpy
 
-      - name: Run 100-Image Test with Debug Output
-        run: python test_100_images.py
+      - name: Run 300-Image Test with Debug Output
+        run: python gulbilbot.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
@@ -52,7 +52,7 @@ jobs:
         if: always()
         run: |
           rm -rf today/
-          rm -rf test_100_images/
+          rm -rf test_images_folder/
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -60,7 +60,7 @@ jobs:
         with:
           name: yellow-car-test-results-${{ github.run_number }}
           path: |
-            test_100_results.txt
+            test_results.txt
           retention-days: 7
 
       - name: Upload session logs (on failure)

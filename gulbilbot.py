@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Download and test 100 random webcam images for yellow car detection
+GUL BIL Bot - Detects yellow cars on Norwegian traffic cameras and posts to Bluesky
+Downloads 300 random webcam images, detects yellow vehicles using YOLO26, and posts them
 """
 
 import base64
@@ -26,8 +27,8 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-TEST_FOLDER = Path("test_100_images")
-TEST_FOLDER.mkdir(exist_ok=True)
+TEST_IMAGES_FOLDER = Path("test_images_folder")
+TEST_IMAGES_FOLDER.mkdir(exist_ok=True)
 
 # Read webcam URLs
 WEBCAM_URLS_FILE = Path("valid_webcam_ids.txt")
@@ -326,11 +327,11 @@ def post_to_bluesky(image_path, alt_text):
         logging.error(f"Error posting to Bluesky: {e}")
         return False
 
-def test_100_images():
-    """Download and test 100 random webcam images"""
+def gulbilbot():
+    """Download and test 300 random webcam images for yellow car detection"""
     
     print("\n" + "=" * 80)
-    print("YELLOW CAR DETECTION - 100 IMAGE TEST")
+    print("YELLOW CAR DETECTION - 300 IMAGE TEST")
     print("=" * 80 + "\n")
     
     # Load URLs
@@ -340,10 +341,10 @@ def test_100_images():
         return
     
     logging.info(f"Loaded {len(urls)} webcam URLs")
-    logging.info("Selecting 100 random images...")
+    logging.info("Selecting 300 random images...")
     
-    # Select 100 random URLs
-    test_urls = random.sample(urls, min(100, len(urls)))
+    # Select 300 random URLs
+    test_urls = random.sample(urls, min(300, len(urls)))
     logging.info(f"Selected {len(test_urls)} URLs for testing\n")
     
     # Load YOLO26 model
@@ -364,10 +365,10 @@ def test_100_images():
     
     for idx, url in enumerate(test_urls, 1):
         image_name = f"test_{idx:03d}.jpg"
-        image_path = TEST_FOLDER / image_name
+        image_path = TEST_IMAGES_FOLDER / image_name
         
         # Download image
-        print(f"[{idx:3d}/100] ", end="", flush=True)
+        print(f"[{idx:3d}/300] ", end="", flush=True)
         
         if not download_image(url, image_path):
             print("❌ Download failed")
@@ -442,7 +443,7 @@ def test_100_images():
     
     # Summary
     print("\n" + "=" * 80)
-    print("TEST SUMMARY - 100 IMAGES")
+    print("TEST SUMMARY - 300 IMAGES")
     print("=" * 80)
     print(f"Total images tested: {downloaded}")
     print(f"Yellow cars detected: {detected} ({100*detected/max(1, downloaded):.1f}%)")
@@ -463,9 +464,9 @@ def test_100_images():
                 pass
     
     # Save detailed results
-    results_file = Path("test_100_results.txt")
+    results_file = Path("test_results.txt")
     with open(results_file, 'w') as f:
-        f.write("Yellow Car Detection - 100 Image Test Results\n")
+        f.write("Yellow Car Detection - 300 Image Test Results\n")
         f.write("=" * 80 + "\n\n")
         f.write(f"Test Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Total Downloaded: {downloaded}\n")
@@ -485,10 +486,10 @@ def test_100_images():
     # Cleanup
     try:
         import shutil
-        shutil.rmtree(TEST_FOLDER)
-        logging.info(f"Cleaned up test folder: {TEST_FOLDER}")
+        shutil.rmtree(TEST_IMAGES_FOLDER)
+        logging.info(f"Cleaned up test folder: {TEST_IMAGES_FOLDER}")
     except:
         pass
 
 if __name__ == "__main__":
-    test_100_images()
+    gulbilbot()
