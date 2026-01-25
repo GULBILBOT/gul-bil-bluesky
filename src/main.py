@@ -5,11 +5,13 @@ Uses YOLO26 object detection model for detecting yellow cars directly.
 """
 
 import base64
+import io
 import json
 import logging
 import os
 import random
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
