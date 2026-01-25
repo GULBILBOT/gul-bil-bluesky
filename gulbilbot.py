@@ -67,6 +67,11 @@ def detect_yellow_car(image_path):
     """
     Run YOLO26 on an image and check for 'car' detections with yellow color.
     Returns dict with detection info: {'detected': bool, 'boxes': [(x1, y1, x2, y2, class_name, conf, yellow_ratio)]}
+    
+    Optimized flow:
+    1. Run YOLO26 detection
+    2. Skip if no vehicles found
+    3. Only check for yellow color on relevant vehicle types
     """
     global yolo_model
     
@@ -90,9 +95,16 @@ def detect_yellow_car(image_path):
         # Run YOLO26 inference
         results = yolo_model(img, verbose=False)
         yellow_boxes = []
+        
+        # Supported vehicle types for yellow car detection
+        VEHICLE_TYPES = {"car", "truck", "bus", "van", "threewheel"}
 
         # Parse detections
         for res in results:
+            # Check if there are ANY detections at all
+            if len(res.boxes.data) == 0:
+                continue
+            
             for det in res.boxes.data.tolist():
                 x1, y1, x2, y2, conf, cls_id = det
 
@@ -100,12 +112,12 @@ def detect_yellow_car(image_path):
                 if conf < CONF_THRESHOLD:
                     continue
 
-                # Check if detected class is a yellow vehicle
+                # Check if detected class is a supported vehicle type
                 class_name = yolo_model.names[int(cls_id)]
-                if class_name not in ["car", "truck", "bus", "van", "threewheel"]:
+                if class_name not in VEHICLE_TYPES:
                     continue
 
-                # Crop the bounding box region
+                # Only now do the expensive color check - crop the bounding box region
                 x1i, y1i, x2i, y2i = map(int, (x1, y1, x2, y2))
                 
                 # Ensure valid crop coordinates
