@@ -255,18 +255,14 @@ def draw_bounding_boxes(image_path, boxes, output_path=None):
 
 
 def get_image_data_url(image_file, image_format, max_size=(800, 600), quality=85):
-    """Get base64 data URL for image, with automatic resizing"""
+    """Get base64 data URL for image without resizing to preserve quality for analysis"""
     try:
         with Image.open(image_file) as img:
             img = img.convert('RGB')
             
-            original_size = img.size
-            if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
-                img.thumbnail(max_size, Image.Resampling.LANCZOS)
-                logging.debug(f"Resized image from {original_size} to {img.size}")
-            
             img_bytes = io.BytesIO()
-            img.save(img_bytes, format='JPEG', quality=quality, optimize=True)
+            # Use high quality to preserve image details
+            img.save(img_bytes, format='JPEG', quality=95, optimize=False)
             img_bytes.seek(0)
             
             image_base64 = base64.b64encode(img_bytes.getvalue()).decode()
