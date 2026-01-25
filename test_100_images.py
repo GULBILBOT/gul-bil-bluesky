@@ -4,15 +4,20 @@ Download and test 100 random webcam images for yellow car detection
 """
 
 import base64
+import io
 import os
 import random
 import requests
 import logging
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from atproto import Client, models
 from dotenv import load_dotenv
-from src.main import load_yolo_model, detect_yellow_car, download_image, draw_bounding_boxes, get_image_data_url
+import cv2
+import numpy as np
+from PIL import Image
+from ultralytics import YOLO
 
 load_dotenv()
 
@@ -31,6 +36,245 @@ WEBCAM_URLS_FILE = Path("valid_webcam_ids.txt")
 # Bluesky credentials
 BSKY_HANDLE = os.getenv("BSKY_HANDLE")
 BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
+
+# YOLO26 configuration - STRICTER DETECTION
+YOLO_MODEL_PATH = "yolo26n.pt"
+CONF_THRESHOLD = 0.5  # Increased from 0.3 - higher confidence required
+YELLOW_RATIO_THRESHOLD = 0.35  # Increased from 0.15 - much more yellow required (35% vs 15%)
+
+# Global YOLO model
+yolo_model = None
+
+
+def load_yolo_model():
+    """Load YOLO26 model once at startup"""
+    global yolo_model
+    
+    if yolo_model is not None:
+        return True
+    
+    try:
+        logging.info(f"Loading YOLO26 model from {YOLO_MODEL_PATH}...")
+        yolo_model = YOLO(YOLO_MODEL_PATH)
+        logging.info("✅ YOLO26 model loaded successfully")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to load YOLO26 model: {e}")
+        return False
+
+
+def detect_yellow_car(image_path):
+    """
+    Run YOLO26 on an image and check for 'car' detections with yellow color.
+    Returns dict with detection info: {'detected': bool, 'boxes': [(x1, y1, x2, y2, class_name, conf, yellow_ratio)]}
+    """
+    global yolo_model
+    
+    if yolo_model is None:
+        if not load_yolo_model():
+            return {"detected": False, "boxes": []}
+    
+    try:
+        # Load image with OpenCV
+        img = cv2.imread(str(image_path))
+        if img is None:
+            if image_path.exists():
+                file_size = image_path.stat().st_size
+                with open(image_path, "rb") as f:
+                    header = f.read(16)
+                logging.error(f"Could not load image: {image_path} (size={file_size}, header={header[:8].hex()})")
+            else:
+                logging.error(f"Could not load image: {image_path} (file does not exist)")
+            return {"detected": False, "boxes": []}
+
+        # Run YOLO26 inference
+        results = yolo_model(img, verbose=False)
+        yellow_boxes = []
+
+        # Parse detections
+        for res in results:
+            for det in res.boxes.data.tolist():
+                x1, y1, x2, y2, conf, cls_id = det
+
+                # Skip low-confidence detections
+                if conf < CONF_THRESHOLD:
+                    continue
+
+                # Check if detected class is a yellow vehicle
+                class_name = yolo_model.names[int(cls_id)]
+                if class_name not in ["car", "truck", "bus", "van", "threewheel"]:
+                    continue
+
+                # Crop the bounding box region
+                x1i, y1i, x2i, y2i = map(int, (x1, y1, x2, y2))
+                
+                # Ensure valid crop coordinates
+                h, w = img.shape[:2]
+                x1i, y1i = max(0, x1i), max(0, y1i)
+                x2i, y2i = min(w, x2i), min(h, y2i)
+                
+                if x2i <= x1i or y2i <= y1i:
+                    continue
+                
+                crop = img[y1i:y2i, x1i:x2i]
+
+                # Convert to HSV and count yellow pixels
+                hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                
+                # HSV range for yellow (adjusted for traffic cameras)
+                lower_yellow = np.array([15, 80, 80])
+                upper_yellow = np.array([35, 255, 255])
+                mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
+
+                # Calculate yellow ratio in crop
+                yellow_pixels = (mask > 0).sum()
+                total_pixels = mask.size
+                yellow_ratio = yellow_pixels / (total_pixels + 1e-6)
+                
+                logging.debug(f"Detected {class_name} (conf={conf:.2f}): yellow_ratio={yellow_ratio:.3f}")
+                
+                if yellow_ratio > YELLOW_RATIO_THRESHOLD:
+                    logging.info(f"🟡 Yellow {class_name} detected!")
+                    logging.info(f"   Confidence: {conf:.3f}")
+                    logging.info(f"   Yellow ratio: {yellow_ratio:.3f}")
+                    logging.info(f"   Bounding box: ({x1i},{y1i}) to ({x2i},{y2i})")
+                    yellow_boxes.append((x1i, y1i, x2i, y2i, class_name, conf, yellow_ratio))
+
+        if yellow_boxes:
+            return {"detected": True, "boxes": yellow_boxes}
+        else:
+            return {"detected": False, "boxes": []}
+        
+    except Exception as e:
+        logging.error(f"Error in YOLO26 detection: {e}")
+        return {"detected": False, "boxes": []}
+
+
+def download_image(url, dest, timeout=10):
+    """Download image from URL and validate it's a real image"""
+    try:
+        resp = requests.get(url, allow_redirects=True, timeout=timeout, stream=True)
+        if resp.status_code != 200:
+            logging.debug(f"Failed to download {url}: Status {resp.status_code}")
+            return False
+        
+        if not resp.content or len(resp.content) == 0:
+            logging.debug(f"Empty response from {url}")
+            return False
+        
+        content_length = resp.headers.get('content-length')
+        if content_length and int(content_length) == 0:
+            logging.debug(f"Content-Length is 0 for {url}")
+            return False
+        
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(dest, "wb") as f:
+            f.write(resp.content)
+        
+        if not dest.exists():
+            logging.debug(f"File not created: {dest}")
+            return False
+        
+        file_size = dest.stat().st_size
+        if file_size == 0:
+            logging.debug(f"File is empty after write: {dest}")
+            dest.unlink()
+            return False
+        
+        with open(dest, "rb") as f:
+            header = f.read(16)
+        
+        # Check for valid image magic bytes
+        is_jpeg = header[:2] == b'\xff\xd8'
+        is_png = header[:4] == b'\x89PNG'
+        is_gif = header[:4] == b'GIF8'
+        is_bmp = header[:2] == b'BM'
+        is_webp = header[8:12] == b'WEBP'
+        is_valid_image = is_jpeg or is_png or is_gif or is_bmp or is_webp
+        
+        if is_valid_image:
+            logging.debug(f"Downloaded {dest.name}: {file_size} bytes, valid image")
+            return True
+        else:
+            logging.info(f"Invalid image format for {dest.name}: header {header[:16].hex()} - likely HTML/error response")
+            dest.unlink()
+            return False
+        
+    except Exception as e:
+        logging.debug(f"Exception downloading {url}: {e}")
+        if dest.exists():
+            try:
+                dest.unlink()
+            except:
+                pass
+        return False
+
+
+def draw_bounding_boxes(image_path, boxes, output_path=None):
+    """
+    Draw bounding boxes on detected yellow vehicles.
+    """
+    try:
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return None
+        
+        # Draw bounding boxes
+        for x1, y1, x2, y2, class_name, conf, yellow_ratio in boxes:
+            # Draw yellow rectangle
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 255), 3)
+            
+            # Draw label with class name and confidence
+            label = f"{class_name} {conf:.2f}"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            thickness = 2
+            
+            (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+            
+            # Draw background rectangle for text
+            cv2.rectangle(img, (x1, y1 - text_height - 10), (x1 + text_width + 5, y1), (0, 255, 255), -1)
+            
+            # Draw text
+            cv2.putText(img, label, (x1 + 2, y1 - 5), font, font_scale, (0, 0, 0), thickness)
+        
+        if output_path is None:
+            output_path = image_path.parent / f"annotated_{image_path.name}"
+        
+        cv2.imwrite(str(output_path), img)
+        logging.debug(f"Saved annotated image to {output_path}")
+        return output_path
+        
+    except Exception as e:
+        logging.error(f"Error drawing bounding boxes: {e}")
+        return None
+
+
+def get_image_data_url(image_file, image_format, max_size=(800, 600), quality=85):
+    """Get base64 data URL for image, with automatic resizing"""
+    try:
+        with Image.open(image_file) as img:
+            img = img.convert('RGB')
+            
+            original_size = img.size
+            if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
+                img.thumbnail(max_size, Image.Resampling.LANCZOS)
+                logging.debug(f"Resized image from {original_size} to {img.size}")
+            
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format='JPEG', quality=quality, optimize=True)
+            img_bytes.seek(0)
+            
+            image_base64 = base64.b64encode(img_bytes.getvalue()).decode()
+            
+            final_size_kb = len(image_base64) * 3 / 4 / 1024
+            logging.debug(f"Final image payload: {final_size_kb:.1f} KB")
+            
+        return f"data:image/jpeg;base64,{image_base64}"
+    except Exception as e:
+        logging.error(f"Could not read/process '{image_file}': {e}")
+        return None
 
 def load_webcam_urls():
     """Load all webcam URLs"""
@@ -162,10 +406,8 @@ def test_100_images():
                         pass
             else:
                 # Get YOLO detections for debug info
-                import cv2
                 img = cv2.imread(str(image_path))
                 if img is not None:
-                    from src.main import yolo_model
                     yolo_results = yolo_model(img, verbose=False)
                     vehicle_types = []
                     for res in yolo_results:
