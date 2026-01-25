@@ -13,6 +13,9 @@ requests = "*"
 python-dotenv = "*"
 atproto = "*"
 Pillow = "*"
+ultralytics = "*"
+opencv-python = "*"
+numpy = "*"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -1,7 +1,0 @@
-requests
-python-dotenv
-atproto
-Pillow
-ultralytics
-opencv-python
-numpy
