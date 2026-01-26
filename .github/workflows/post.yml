@@ -3,9 +3,10 @@ name: "Yellow Car Bot - YOLO26 Powered"
 on:
   schedule:
     # Run 3 times per day to spread out the 814 cameras fairly
-    - cron: "0 6 * * *"   # 6 AM UTC
-    - cron: "0 14 * * *"  # 2 PM UTC
-    - cron: "0 22 * * *"  # 10 PM UTC
+    # Times in UTC (Oslo is UTC+1 in winter, UTC+2 in summer)
+    - cron: "0 6 * * *"   # 7:00 AM Oslo time (winter: 06:00 UTC, summer: 05:00 UTC)
+    - cron: "0 10 * * *"  # 11:00 AM Oslo time (winter: 10:00 UTC, summer: 09:00 UTC)
+    - cron: "0 14 * * *"  # 3:00 PM Oslo time (winter: 14:00 UTC, summer: 13:00 UTC)
   workflow_dispatch:  # Manual trigger for testing
 
 jobs:
