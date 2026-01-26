@@ -37,10 +37,10 @@ WEBCAM_URLS_FILE = Path("valid_webcam_ids.txt")
 BSKY_HANDLE = os.getenv("BSKY_HANDLE")
 BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
 
-# YOLO26 configuration - STRICTER DETECTION
+# YOLO26 configuration - BALANCED DETECTION
 YOLO_MODEL_PATH = "yolo26n.pt"
-CONF_THRESHOLD = 0.5  # Increased from 0.3 - higher confidence required
-YELLOW_RATIO_THRESHOLD = 0.45  # Increased from 0.35 - 45% minimum yellow pixels in bounding box
+CONF_THRESHOLD = 0.3  # Lowered back to 0.3 to catch vehicles like yellow buses/taxis
+YELLOW_RATIO_THRESHOLD = 0.35  # Lowered to 0.35 to catch yellow vehicles with varied shades
 
 # Global YOLO model
 yolo_model = None
@@ -133,12 +133,12 @@ def detect_yellow_car(image_path):
                 # Convert to HSV and count yellow pixels
                 hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
                 
-                # HSV range for pure yellow (strict to avoid tan/brown/orange)
-                # Hue: 20-30 (pure yellow, avoiding orange <20 and lime green >30)
-                # Saturation: 100-255 (vibrant, avoiding muted/tan colors)
-                # Value: 100-255 (bright, avoiding dark browns)
-                lower_yellow = np.array([20, 100, 100])
-                upper_yellow = np.array([30, 255, 255])
+                # HSV range for yellow (balanced to catch various yellow vehicles)
+                # Hue: 15-35 (yellow range, includes some orange/lime shades)
+                # Saturation: 80-255 (includes both bright and muted yellows)
+                # Value: 80-255 (includes bright yellows and slightly darker tones)
+                lower_yellow = np.array([15, 80, 80])
+                upper_yellow = np.array([35, 255, 255])
                 mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
                 # Calculate yellow ratio in crop
