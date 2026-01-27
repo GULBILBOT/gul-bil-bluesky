@@ -133,12 +133,12 @@ def detect_yellow_car(image_path):
                 # Convert to HSV and count yellow pixels
                 hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
                 
-                # HSV range for yellow (balanced to catch various yellow vehicles)
-                # Hue: 15-35 (yellow range, includes some orange/lime shades)
-                # Saturation: 80-255 (includes both bright and muted yellows)
-                # Value: 80-255 (includes bright yellows and slightly darker tones)
-                lower_yellow = np.array([15, 80, 80])
-                upper_yellow = np.array([35, 255, 255])
+                # HSV range for yellow (strict to avoid reflections/street lights)
+                # Hue: 20-32 (pure yellow, exclude orange and lime)
+                # Saturation: 120-255 (very vibrant only, exclude pale/whitish reflections)
+                # Value: 100-255 (bright only, exclude dark tones)
+                lower_yellow = np.array([20, 120, 100])
+                upper_yellow = np.array([32, 255, 255])
                 mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
                 # Calculate yellow ratio in crop
@@ -325,7 +325,7 @@ def verify_with_gpt4o(image_path):
                     "content": [
                         {
                             "type": "text",
-                            "text": "Does this image show a YELLOW CAR or YELLOW VEHICLE? Answer with only 'yes' or 'no'. Be strict - reject road markings, yellow signs, or anything that isn't an actual yellow car/vehicle."
+                            "text": "Is there a YELLOW COLORED CAR or BUS in this image? The vehicle itself must be painted yellow. Answer ONLY 'yes' or 'no'. Reject: reflections, street lights, road markings, yellow signs, taxi signs, or any non-vehicle objects. Only confirm actual yellow painted vehicles."
                         },
                         {
                             "type": "image_url",
