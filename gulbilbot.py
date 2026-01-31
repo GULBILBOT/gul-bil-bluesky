@@ -39,8 +39,8 @@ BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
 
 # YOLO26 configuration - BALANCED DETECTION
 YOLO_MODEL_PATH = "yolo26n.pt"
-CONF_THRESHOLD = 0.3  # Lowered back to 0.3 to catch vehicles like yellow buses/taxis
-YELLOW_RATIO_THRESHOLD = 0.35  # Lowered to 0.35 to catch yellow vehicles with varied shades
+CONF_THRESHOLD = 0.3  # Lowered to 0.3 to catch vehicles like yellow buses/taxis
+YELLOW_RATIO_THRESHOLD = 0.30  # Lowered to 0.30 to catch all yellow vehicles
 
 # Global YOLO model
 yolo_model = None
@@ -133,12 +133,12 @@ def detect_yellow_car(image_path):
                 # Convert to HSV and count yellow pixels
                 hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
                 
-                # HSV range for yellow (strict to avoid reflections/street lights)
-                # Hue: 20-32 (pure yellow, exclude orange and lime)
-                # Saturation: 120-255 (very vibrant only, exclude pale/whitish reflections)
-                # Value: 100-255 (bright only, exclude dark tones)
-                lower_yellow = np.array([20, 120, 100])
-                upper_yellow = np.array([32, 255, 255])
+                # HSV range for yellow (balanced to catch various yellow vehicles)
+                # Hue: 15-35 (yellow range, includes some orange/lime shades)
+                # Saturation: 75-255 (includes both bright and muted yellows)
+                # Value: 70-255 (includes bright yellows and slightly darker tones)
+                lower_yellow = np.array([15, 75, 70])
+                upper_yellow = np.array([35, 255, 255])
                 mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
                 # Calculate yellow ratio in crop
