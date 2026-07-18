@@ -52,7 +52,7 @@ numpy
 **requirements.txt**:
 ```txt
 torch==2.13.0
-torchvision==0.23.0
+torchvision==0.28.0
 requests
 python-dotenv
 atproto
