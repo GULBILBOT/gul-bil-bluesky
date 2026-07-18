@@ -8,13 +8,15 @@ readme = "README.md"
 keywords = ["bsky", "bluesky", "atproto", "bot", "python"]
 
 [tool.poetry.dependencies]
-python = ">=3.11"
+python = ">=3.11,<3.12"
 requests = "*"
 python-dotenv = "*"
 atproto = "*"
 Pillow = "*"
 ultralytics = "*"
-opencv-python = "*"
+torch = "*"
+torchvision = "*"
+opencv-python-headless = "*"
 numpy = "*"
 
 [build-system]

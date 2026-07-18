@@ -29,18 +29,37 @@ your-repo/
 ├── valid_webcam_ids.txt
 ├── .github/
 │   └── workflows/
-│       └── post.yml
+│       ├── post.yml
+│       └── update-dummy-md.yml
 └── README.md
 ```
 
 ### 2. Required Files
 
-**pyproject.toml**:
+**pyproject.toml** and **requirements.txt**:
 ```txt
 requests
 python-dotenv
+torch
+torchvision
 Pillow
 atproto
+ultralytics
+opencv-python-headless
+numpy
+```
+
+**requirements.txt**:
+```txt
+torch==2.13.0
+torchvision==0.23.0
+requests
+python-dotenv
+atproto
+Pillow
+ultralytics
+opencv-python-headless
+numpy
 ```
 
 **valid_webcam_ids.txt**:
@@ -155,8 +174,10 @@ Trigger a manual run:
 
 - **`gulbilbot.py`**: Main bot script (downloads 300 random images, detects yellow cars, posts to Bluesky)
 - **`pyproject.toml`**: Python dependencies
+- **`requirements.txt`**: Pinned runtime dependencies for pip-based installs
 - **`valid_webcam_ids.txt`**: List of 814 traffic camera URLs
-- **`.github/workflows/post.yml`**: GitHub Actions workflow (runs 3x daily)
+- **`.github/workflows/post.yml`**: GitHub Actions workflow for the main bot run
+- **`.github/workflows/update-dummy-md.yml`**: GitHub Actions workflow (updates `dummy.md` weekly)
 - **`test_results.txt`**: Results from latest run (auto-generated)
 
 ## Privacy & Ethics
