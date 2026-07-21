@@ -1,4 +1,4 @@
-## Python 3.11 only: atproto does not support Python 3.12+
+# Python 3.11 only: atproto does not support Python 3.12+
 torch==2.13.0
 torchvision==0.28.0
 requests
