@@ -4,6 +4,7 @@ torchvision==0.28.0
 requests
 python-dotenv
 atproto
+cryptography>=48.0.1
 Pillow
 ultralytics
 opencv-python-headless
