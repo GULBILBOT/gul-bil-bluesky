@@ -50,8 +50,6 @@ jobs:
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
-          KEY_GITHUB_TOKEN: ${{ secrets.KEY_GITHUB_TOKEN }}
-          HF_API_TOKEN: ${{ secrets.HF_API_TOKEN }}
 
       - name: Cleanup temporary files
         if: always()
