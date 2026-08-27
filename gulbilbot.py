@@ -305,13 +305,12 @@ def verify_with_copilot(image_path):
     """Verify yellow car detection using Copilot CLI with vision model.
     Returns True if confirmed yellow car, False if rejected, None on error."""
     try:
-        # Check if gh CLI is available (using shutil.which instead of subprocess)
-        if shutil.which("gh") is None:
-            logging.warning("GitHub CLI not found - skipping vision verification")
+        # Check if copilot CLI is available
+        if shutil.which("copilot") is None:
+            logging.warning("Copilot CLI not found - skipping vision verification")
             return None
 
-        # Use Claude Haiku 4.5 (vision-capable, free tier)
-        # Image attachment via @ syntax
+        # Prompt for vision verification
         prompt = (
             f"Is there a YELLOW COLORED CAR or BUS in this image? "
             f"The vehicle itself must be painted yellow. "
@@ -321,35 +320,56 @@ def verify_with_copilot(image_path):
             f"Only confirm actual yellow painted vehicles."
         )
 
-        # Call Copilot CLI with image attachment via @ syntax
-        # Note: prompt with @path must be a single string argument, not split
-        cmd = [
-            "copilot",
-            "--model", "claude-haiku-4.5",
-            "-p", f"{prompt} @{image_path}",
-            "--no-ask-user"
-        ]
+        # Try multiple vision-capable models
+        models_to_try = ["gpt-5.4-mini", "claude-haiku-4.5", "claude-sonnet-4.5"]
 
-        logging.info("🔍 Verifying with Copilot CLI (Claude Haiku 4.5)...")
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+        for model in models_to_try:
+            try:
+                logging.info(f"🔍 Verifying with Copilot CLI ({model})...")
 
-        if proc.returncode != 0:
-            logging.warning(f"Copilot CLI failed: {proc.stderr}")
-            return None
+                # Use --attachment flag for image (correct syntax per docs)
+                cmd = [
+                    "copilot",
+                    "--model", model,
+                    "-p", prompt,
+                    "--attachment", str(image_path),
+                    "--no-ask-user"
+                ]
 
-        response = proc.stdout.strip().lower()
-        logging.info(f"✅ Copilot verification response: {response}")
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
 
-        # Check if response contains "yes"
-        return "yes" in response
+                if proc.returncode != 0:
+                    error_msg = proc.stderr.strip()
+                    logging.debug(f"Model {model} failed: {error_msg}")
+                    if "not available" in error_msg.lower():
+                        logging.info(f"  ⏭️  Model {model} not available, trying next...")
+                        continue
+                    logging.warning(f"Copilot CLI failed: {error_msg}")
+                    return None
 
-    except subprocess.TimeoutExpired:
-        logging.warning("Copilot CLI verification timed out")
+                response = proc.stdout.strip().lower()
+                logging.info(f"✅ Copilot verification response: {response}")
+
+                # Check if response contains "yes"
+                return "yes" in response
+
+            except subprocess.TimeoutExpired:
+                logging.warning(f"Model {model} verification timed out")
+                continue
+            except Exception as e:
+                logging.debug(f"Model {model} error: {e}")
+                continue
+
+        logging.error("All Copilot models failed - verification unavailable")
+        return None
+
+    except Exception as e:
+        logging.warning(f"Error in Copilot verification: {e}")
         return None
     except Exception as e:
         logging.warning(f"Error in Copilot verification: {e}")
