@@ -11,6 +11,7 @@ import random
 import requests
 import logging
 import subprocess
+import shutil
 from pathlib import Path
 from datetime import datetime, timezone
 from atproto import Client, models
@@ -304,13 +305,8 @@ def verify_with_copilot(image_path):
     """Verify yellow car detection using Copilot CLI with vision model.
     Returns True if confirmed yellow car, False if rejected, None on error."""
     try:
-        # Check if gh CLI is available
-        result = subprocess.run(
-            ["which", "gh"],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
+        # Check if gh CLI is available (using shutil.which instead of subprocess)
+        if shutil.which("gh") is None:
             logging.warning("GitHub CLI not found - skipping vision verification")
             return None
 
@@ -326,10 +322,11 @@ def verify_with_copilot(image_path):
         )
 
         # Call Copilot CLI with image attachment via @ syntax
+        # Note: prompt with @path must be a single string argument, not split
         cmd = [
             "gh", "copilot", "suggest",
             "--model", "claude-3-5-haiku",
-            f'"{prompt} @{image_path}"'
+            f"{prompt} @{image_path}"
         ]
 
         logging.info("🔍 Verifying with Copilot CLI (Claude Haiku 4.5)...")

@@ -51,13 +51,16 @@ jobs:
       - name: Install GitHub CLI & Copilot Extension
         run: |
           gh extension install github/gh-copilot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run 300-Image Test with Debug Output
         run: python gulbilbot.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
-          # GH_TOKEN is used automatically by gh copilot
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub CLI uses GH_TOKEN for authentication
           # Claude Haiku 4.5 supports vision on free plan
 
       - name: Cleanup temporary files
