@@ -310,7 +310,7 @@ def verify_with_copilot(image_path):
             logging.warning("GitHub CLI not found - skipping vision verification")
             return None
 
-        # Use Claude Sonnet 4.5 (vision-capable, Pro tier)
+        # Use Claude Haiku 4.5 (vision-capable, free tier)
         # Image attachment via @ syntax
         prompt = (
             f"Is there a YELLOW COLORED CAR or BUS in this image? "
@@ -325,12 +325,12 @@ def verify_with_copilot(image_path):
         # Note: prompt with @path must be a single string argument, not split
         cmd = [
             "copilot",
-            "--model", "claude-sonnet-4.5",
+            "--model", "claude-haiku-4.5",
             "-p", f"{prompt} @{image_path}",
             "--no-ask-user"
         ]
 
-        logging.info("🔍 Verifying with Copilot CLI (Claude Sonnet 4.5)...")
+        logging.info("🔍 Verifying with Copilot CLI (Claude Haiku 4.5)...")
         proc = subprocess.run(
             cmd,
             capture_output=True,
@@ -489,13 +489,6 @@ def gulbilbot():
                 else:
                     logging.error("❌ Copilot verification failed - NOT posting (require explicit confirmation)")
                     print("→ REJECTED: Copilot verification failed")
-
-                    # Clean up annotated image if it was created
-                    if annotated_path and annotated_path != image_path:
-                        try:
-                            annotated_path.unlink()
-                        except Exception:
-                            pass
             else:
                 # Get YOLO detections for debug info
                 img = cv2.imread(str(image_path))
