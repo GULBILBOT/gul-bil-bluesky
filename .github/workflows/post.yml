@@ -9,6 +9,9 @@ on:
     - cron: "0 14 * * *"  # 3:00 PM Oslo time (winter: 14:00 UTC, summer: 13:00 UTC)
   workflow_dispatch:  # Manual trigger for testing
 
+permissions:
+  contents: read
+
 jobs:
   yellow-car-detector:
     runs-on: ubuntu-latest
@@ -38,18 +41,23 @@ jobs:
         run: |
           uv pip install --system -r requirements.txt \
             --extra-index-url https://download.pytorch.org/whl/cpu
-      
+
       - name: Show installed ML packages
         run: |
           python -c "import torch; print('Torch:', torch.__version__)"
           python -c "import torchvision; print('TorchVision:', torchvision.__version__)"
           pip freeze | grep -E 'torch|ultralytics'
 
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
       - name: Run 300-Image Test with Debug Output
         run: python gulbilbot.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
+          # GITHUB_TOKEN is used automatically by Copilot CLI
+          # No PAT required since July 2026 (for org-owned repos with policy enabled)
 
       - name: Cleanup temporary files
         if: always()

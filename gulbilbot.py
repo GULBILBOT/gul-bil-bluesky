@@ -10,6 +10,7 @@ import os
 import random
 import requests
 import logging
+import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
 from atproto import Client, models
@@ -299,6 +300,65 @@ def load_webcam_urls():
     return urls
 
 
+def verify_with_copilot(image_path):
+    """Verify yellow car detection using Copilot CLI with vision model.
+    Returns True if confirmed yellow car, False if rejected, None on error."""
+    try:
+        # Check if copilot CLI is available
+        result = subprocess.run(
+            ["which", "copilot"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            logging.warning("Copilot CLI not found - skipping vision verification")
+            return None
+
+        prompt = (
+            "Is there a YELLOW COLORED CAR or BUS in this image? "
+            "The vehicle itself must be painted yellow. "
+            "Answer ONLY 'yes' or 'no'. "
+            "Reject: reflections, street lights, road markings, yellow signs, "
+            "taxi signs, or any non-vehicle objects. "
+            "Only confirm actual yellow painted vehicles."
+        )
+
+        # Call Copilot CLI with image attachment
+        cmd = [
+            "copilot",
+            "--model", "gemini-3.6-flash",
+            "--attachment", str(image_path),
+            "-p", prompt,
+            "--no-ask-user",
+            "-s"
+        ]
+
+        logging.info("🔍 Verifying with Copilot CLI (Gemini 3.6 Flash)...")
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if proc.returncode != 0:
+            logging.warning(f"Copilot CLI failed: {proc.stderr}")
+            return None
+
+        response = proc.stdout.strip().lower()
+        logging.info(f"✅ Copilot verification response: {response}")
+
+        # Check if response contains "yes"
+        return "yes" in response
+
+    except subprocess.TimeoutExpired:
+        logging.warning("Copilot CLI verification timed out")
+        return None
+    except Exception as e:
+        logging.warning(f"Error in Copilot verification: {e}")
+        return None
+
+
 def post_to_bluesky(image_path, alt_text):
     """Post image to Bluesky with alt text"""
     if not BSKY_HANDLE or not BSKY_PASSWORD:
@@ -405,21 +465,48 @@ def gulbilbot():
                 vehicle_types = ", ".join(set(box[4] for box in result["boxes"]))
                 print(f"→ YELLOW {vehicle_types.upper()} FOUND ({num_boxes} vehicle(s))")
 
-                # Draw bounding boxes and post to Bluesky
-                annotated_path = draw_bounding_boxes(image_path, result["boxes"])
-                image_to_post = annotated_path if annotated_path else image_path
+                # Verify with Copilot CLI vision before posting
+                logging.info("🔍 Verifying with Copilot CLI before posting...")
+                copilot_confirmed = verify_with_copilot(image_path)
 
-                logging.info("📤 Posting to Bluesky...")
-                if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
-                    posted += 1
-                    logging.info("✅ Posted successfully!")
+                if copilot_confirmed is False:
+                    logging.warning("❌ Copilot rejected detection - NOT posting (likely false positive)")
+                    print("→ REJECTED by Copilot (false positive)")
+                elif copilot_confirmed is True:
+                    logging.info("✅ Copilot CONFIRMED yellow car - proceeding to post")
+                    # Draw bounding boxes and post to Bluesky
+                    annotated_path = draw_bounding_boxes(image_path, result["boxes"])
+                    image_to_post = annotated_path if annotated_path else image_path
 
-                # Clean up annotated image if it was created
-                if annotated_path and annotated_path != image_path:
-                    try:
-                        annotated_path.unlink()
-                    except Exception:
-                        pass
+                    logging.info("📤 Posting to Bluesky...")
+                    if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
+                        posted += 1
+                        logging.info("✅ Posted successfully!")
+
+                    # Clean up annotated image if it was created
+                    if annotated_path and annotated_path != image_path:
+                        try:
+                            annotated_path.unlink()
+                        except Exception:
+                            pass
+                else:
+                    logging.warning("⚠️ Copilot verification failed (CLI error) - posting to be safe")
+                    print("→ Copilot verification failed (posting anyway)")
+                    # Draw bounding boxes and post to Bluesky
+                    annotated_path = draw_bounding_boxes(image_path, result["boxes"])
+                    image_to_post = annotated_path if annotated_path else image_path
+
+                    logging.info("📤 Posting to Bluesky...")
+                    if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
+                        posted += 1
+                        logging.info("✅ Posted successfully!")
+
+                    # Clean up annotated image if it was created
+                    if annotated_path and annotated_path != image_path:
+                        try:
+                            annotated_path.unlink()
+                        except Exception:
+                            pass
             else:
                 # Get YOLO detections for debug info
                 img = cv2.imread(str(image_path))
