@@ -48,8 +48,16 @@ jobs:
           python -c "import torchvision; print('TorchVision:', torchvision.__version__)"
           pip freeze | grep -E 'torch|ultralytics'
 
+      # Ensure Node.js is available before installing the Copilot CLI
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Install GitHub Copilot CLI
-        run: npm install -g @github/copilot
+        run: |
+          npm install -g @github/copilot
+          copilot --version || true
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
 
