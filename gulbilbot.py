@@ -310,7 +310,7 @@ def verify_with_copilot(image_path):
             logging.warning("GitHub CLI not found - skipping vision verification")
             return None
 
-        # Use Claude Haiku 4.5 (vision-capable, free tier)
+        # Use Claude Sonnet 4.5 (vision-capable, Pro tier)
         # Image attachment via @ syntax
         prompt = (
             f"Is there a YELLOW COLORED CAR or BUS in this image? "
@@ -325,12 +325,12 @@ def verify_with_copilot(image_path):
         # Note: prompt with @path must be a single string argument, not split
         cmd = [
             "copilot",
-            "--model", "claude-haiku-4-5",
+            "--model", "claude-sonnet-4.5",
             "-p", f"{prompt} @{image_path}",
             "--no-ask-user"
         ]
 
-        logging.info("🔍 Verifying with Copilot CLI (Claude Haiku 4.5)...")
+        logging.info("🔍 Verifying with Copilot CLI (Claude Sonnet 4.5)...")
         proc = subprocess.run(
             cmd,
             capture_output=True,
@@ -487,16 +487,8 @@ def gulbilbot():
                         except Exception:
                             pass
                 else:
-                    logging.warning("⚠️ Copilot verification failed (CLI error) - posting to be safe")
-                    print("→ Copilot verification failed (posting anyway)")
-                    # Draw bounding boxes and post to Bluesky
-                    annotated_path = draw_bounding_boxes(image_path, result["boxes"])
-                    image_to_post = annotated_path if annotated_path else image_path
-
-                    logging.info("📤 Posting to Bluesky...")
-                    if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
-                        posted += 1
-                        logging.info("✅ Posted successfully!")
+                    logging.error("❌ Copilot verification failed - NOT posting (require explicit confirmation)")
+                    print("→ REJECTED: Copilot verification failed")
 
                     # Clean up annotated image if it was created
                     if annotated_path and annotated_path != image_path:
