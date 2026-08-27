@@ -324,9 +324,10 @@ def verify_with_copilot(image_path):
         # Call Copilot CLI with image attachment via @ syntax
         # Note: prompt with @path must be a single string argument, not split
         cmd = [
-            "gh", "copilot", "suggest",
-            "--model", "claude-3-5-haiku",
-            f"{prompt} @{image_path}"
+            "copilot",
+            "--model", "claude-haiku-4-5",
+            "-p", f"{prompt} @{image_path}",
+            "--no-ask-user"
         ]
 
         logging.info("🔍 Verifying with Copilot CLI (Claude Haiku 4.5)...")
