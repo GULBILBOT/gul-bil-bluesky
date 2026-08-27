@@ -10,6 +10,8 @@ import os
 import random
 import requests
 import logging
+import subprocess
+import shutil
 from pathlib import Path
 from datetime import datetime, timezone
 from atproto import Client, models
@@ -299,64 +301,57 @@ def load_webcam_urls():
     return urls
 
 
-def verify_with_gpt4o(image_path):
-    """Verify yellow car detection with GPT-4o before posting to Bluesky"""
-    token = os.getenv("KEY_GITHUB_TOKEN")
-    
-    if not token:
-        logging.warning("GitHub token not available - skipping GPT-4o verification")
-        return None
-    
+def verify_with_copilot(image_path):
+    """Verify yellow car detection using Copilot CLI with vision model.
+    Returns True if confirmed yellow car, False if rejected, None on error."""
     try:
-        image_data_url = get_image_data_url(image_path, "jpg", max_size=(800, 600), quality=85)
-        if not image_data_url:
-            logging.error("Could not prepare image for GPT-4o verification")
+        # Check if gh CLI is available (using shutil.which instead of subprocess)
+        if shutil.which("gh") is None:
+            logging.warning("GitHub CLI not found - skipping vision verification")
             return None
-        
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-        
-        body = {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Is there a YELLOW COLORED CAR or BUS in this image? The vehicle itself must be painted yellow. Answer ONLY 'yes' or 'no'. Reject: reflections, street lights, road markings, yellow signs, taxi signs, or any non-vehicle objects. Only confirm actual yellow painted vehicles."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": image_data_url,
-                                "detail": "low"
-                            }
-                        }
-                    ]
-                }
-            ],
-            "model": "gpt-4o",
-            "max_tokens": 10
-        }
-        
-        endpoint = "https://models.inference.ai.azure.com"
-        resp = requests.post(f"{endpoint}/chat/completions", json=body, headers=headers, timeout=30)
-        
-        if resp.status_code != 200:
-            logging.warning(f"GPT-4o verification failed with status {resp.status_code}")
-            # If GPT-4o fails, log but don't block posting (YOLO26 already checked)
+
+        # Use Claude Haiku 4.5 (vision-capable, free tier)
+        # Image attachment via @ syntax
+        prompt = (
+            f"Is there a YELLOW COLORED CAR or BUS in this image? "
+            f"The vehicle itself must be painted yellow. "
+            f"Answer ONLY 'yes' or 'no'. "
+            f"Reject: reflections, street lights, road markings, yellow signs, "
+            f"taxi signs, or any non-vehicle objects. "
+            f"Only confirm actual yellow painted vehicles."
+        )
+
+        # Call Copilot CLI with image attachment via @ syntax
+        # Note: prompt with @path must be a single string argument, not split
+        cmd = [
+            "gh", "copilot", "suggest",
+            "--model", "claude-3-5-haiku",
+            f"{prompt} @{image_path}"
+        ]
+
+        logging.info("🔍 Verifying with Copilot CLI (Claude Haiku 4.5)...")
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if proc.returncode != 0:
+            logging.warning(f"Copilot CLI failed: {proc.stderr}")
             return None
-        
-        data = resp.json()
-        result = data["choices"][0]["message"]["content"].strip().lower()
-        logging.info(f"✅ GPT-4o verification response: {result}")
-        
-        return "yes" in result
-        
+
+        response = proc.stdout.strip().lower()
+        logging.info(f"✅ Copilot verification response: {response}")
+
+        # Check if response contains "yes"
+        return "yes" in response
+
+    except subprocess.TimeoutExpired:
+        logging.warning("Copilot CLI verification timed out")
+        return None
     except Exception as e:
-        logging.warning(f"Error verifying with GPT-4o: {e}")
+        logging.warning(f"Error in Copilot verification: {e}")
         return None
 
 
@@ -465,25 +460,25 @@ def gulbilbot():
                 detected += 1
                 vehicle_types = ", ".join(set(box[4] for box in result["boxes"]))
                 print(f"→ YELLOW {vehicle_types.upper()} FOUND ({num_boxes} vehicle(s))")
-                
-                # Verify with GPT-4o before posting
-                logging.info("🔍 Verifying with GPT-4o before posting...")
-                gpt4o_confirmed = verify_with_gpt4o(image_path)
-                
-                if gpt4o_confirmed is False:
-                    logging.warning("❌ GPT-4o rejected detection - NOT posting (likely false positive)")
-                    print("→ REJECTED by GPT-4o (false positive)")
-                elif gpt4o_confirmed is True:
-                    logging.info("✅ GPT-4o CONFIRMED yellow car - proceeding to post")
+
+                # Verify with Copilot CLI vision before posting
+                logging.info("🔍 Verifying with Copilot CLI before posting...")
+                copilot_confirmed = verify_with_copilot(image_path)
+
+                if copilot_confirmed is False:
+                    logging.warning("❌ Copilot rejected detection - NOT posting (likely false positive)")
+                    print("→ REJECTED by Copilot (false positive)")
+                elif copilot_confirmed is True:
+                    logging.info("✅ Copilot CONFIRMED yellow car - proceeding to post")
                     # Draw bounding boxes and post to Bluesky
                     annotated_path = draw_bounding_boxes(image_path, result["boxes"])
                     image_to_post = annotated_path if annotated_path else image_path
-                    
+
                     logging.info("📤 Posting to Bluesky...")
                     if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
                         posted += 1
                         logging.info("✅ Posted successfully!")
-                    
+
                     # Clean up annotated image if it was created
                     if annotated_path and annotated_path != image_path:
                         try:
@@ -491,8 +486,23 @@ def gulbilbot():
                         except Exception:
                             pass
                 else:
-                    logging.warning("⚠️  GPT-4o verification failed - skipping post to be safe")
-                    print("→ GPT-4o verification failed")
+                    logging.warning("⚠️ Copilot verification failed (CLI error) - posting to be safe")
+                    print("→ Copilot verification failed (posting anyway)")
+                    # Draw bounding boxes and post to Bluesky
+                    annotated_path = draw_bounding_boxes(image_path, result["boxes"])
+                    image_to_post = annotated_path if annotated_path else image_path
+
+                    logging.info("📤 Posting to Bluesky...")
+                    if post_to_bluesky(image_to_post, alt_text="Yellow car spotted on traffic camera! 🚕"):
+                        posted += 1
+                        logging.info("✅ Posted successfully!")
+
+                    # Clean up annotated image if it was created
+                    if annotated_path and annotated_path != image_path:
+                        try:
+                            annotated_path.unlink()
+                        except Exception:
+                            pass
             else:
                 # Get YOLO detections for debug info
                 img = cv2.imread(str(image_path))

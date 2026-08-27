@@ -9,6 +9,9 @@ on:
     - cron: "0 14 * * *"  # 3:00 PM Oslo time (winter: 14:00 UTC, summer: 13:00 UTC)
   workflow_dispatch:  # Manual trigger for testing
 
+permissions:
+  contents: read
+
 jobs:
   yellow-car-detector:
     runs-on: ubuntu-latest
@@ -38,20 +41,27 @@ jobs:
         run: |
           uv pip install --system -r requirements.txt \
             --extra-index-url https://download.pytorch.org/whl/cpu
-      
+
       - name: Show installed ML packages
         run: |
           python -c "import torch; print('Torch:', torch.__version__)"
           python -c "import torchvision; print('TorchVision:', torchvision.__version__)"
           pip freeze | grep -E 'torch|ultralytics'
 
+      - name: Install GitHub CLI & Copilot Extension
+        run: |
+          gh extension install github/gh-copilot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run 300-Image Test with Debug Output
         run: python gulbilbot.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
-          KEY_GITHUB_TOKEN: ${{ secrets.KEY_GITHUB_TOKEN }}
-          HF_API_TOKEN: ${{ secrets.HF_API_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub CLI uses GH_TOKEN for authentication
+          # Claude Haiku 4.5 supports vision on free plan
 
       - name: Cleanup temporary files
         if: always()
