@@ -304,36 +304,35 @@ def verify_with_copilot(image_path):
     """Verify yellow car detection using Copilot CLI with vision model.
     Returns True if confirmed yellow car, False if rejected, None on error."""
     try:
-        # Check if copilot CLI is available
+        # Check if gh CLI is available
         result = subprocess.run(
-            ["which", "copilot"],
+            ["which", "gh"],
             capture_output=True,
             text=True
         )
         if result.returncode != 0:
-            logging.warning("Copilot CLI not found - skipping vision verification")
+            logging.warning("GitHub CLI not found - skipping vision verification")
             return None
 
+        # Use Claude Haiku 4.5 (vision-capable, free tier)
+        # Image attachment via @ syntax
         prompt = (
-            "Is there a YELLOW COLORED CAR or BUS in this image? "
-            "The vehicle itself must be painted yellow. "
-            "Answer ONLY 'yes' or 'no'. "
-            "Reject: reflections, street lights, road markings, yellow signs, "
-            "taxi signs, or any non-vehicle objects. "
-            "Only confirm actual yellow painted vehicles."
+            f"Is there a YELLOW COLORED CAR or BUS in this image? "
+            f"The vehicle itself must be painted yellow. "
+            f"Answer ONLY 'yes' or 'no'. "
+            f"Reject: reflections, street lights, road markings, yellow signs, "
+            f"taxi signs, or any non-vehicle objects. "
+            f"Only confirm actual yellow painted vehicles."
         )
 
-        # Call Copilot CLI with image attachment
+        # Call Copilot CLI with image attachment via @ syntax
         cmd = [
-            "copilot",
-            "--model", "gemini-3.6-flash",
-            "--attachment", str(image_path),
-            "-p", prompt,
-            "--no-ask-user",
-            "-s"
+            "gh", "copilot", "suggest",
+            "--model", "claude-3-5-haiku",
+            f'"{prompt} @{image_path}"'
         ]
 
-        logging.info("🔍 Verifying with Copilot CLI (Gemini 3.6 Flash)...")
+        logging.info("🔍 Verifying with Copilot CLI (Claude Haiku 4.5)...")
         proc = subprocess.run(
             cmd,
             capture_output=True,

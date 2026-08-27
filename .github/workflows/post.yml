@@ -48,16 +48,17 @@ jobs:
           python -c "import torchvision; print('TorchVision:', torchvision.__version__)"
           pip freeze | grep -E 'torch|ultralytics'
 
-      - name: Install Copilot CLI
-        run: npm install -g @github/copilot
+      - name: Install GitHub CLI & Copilot Extension
+        run: |
+          gh extension install github/gh-copilot
 
       - name: Run 300-Image Test with Debug Output
         run: python gulbilbot.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
-          # GITHUB_TOKEN is used automatically by Copilot CLI
-          # No PAT required since July 2026 (for org-owned repos with policy enabled)
+          # GH_TOKEN is used automatically by gh copilot
+          # Claude Haiku 4.5 supports vision on free plan
 
       - name: Cleanup temporary files
         if: always()
