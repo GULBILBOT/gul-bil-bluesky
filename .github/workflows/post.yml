@@ -48,9 +48,8 @@ jobs:
           python -c "import torchvision; print('TorchVision:', torchvision.__version__)"
           pip freeze | grep -E 'torch|ultralytics'
 
-      - name: Install GitHub CLI & Copilot Extension
-        run: |
-          gh extension install github/gh-copilot
+      - name: Install GitHub Copilot CLI
+        run: npm install -g @github/copilot
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -60,7 +59,7 @@ jobs:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # GitHub CLI uses GH_TOKEN for authentication
+          # GitHub Copilot CLI (standalone) uses GH_TOKEN for auth
           # Claude Haiku 4.5 supports vision on free plan
 
       - name: Cleanup temporary files
