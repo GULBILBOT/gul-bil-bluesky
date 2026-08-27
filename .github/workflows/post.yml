@@ -51,15 +51,15 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm install -g @github/copilot
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
 
       - name: Run 300-Image Test with Debug Output
         run: python gulbilbot.py
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
-          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
-          # GitHub Copilot CLI (standalone) uses GH_TOKEN for auth
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+          # Copilot CLI checks COPILOT_GITHUB_TOKEN first (highest priority)
           # Claude Haiku 4.5 supports vision on free plan
 
       - name: Cleanup temporary files
