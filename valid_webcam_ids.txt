@@ -69,6 +69,7 @@ https://kamera.atlas.vegvesen.no/api/images/0529004_1
 https://kamera.atlas.vegvesen.no/api/images/0529005_1
 https://kamera.atlas.vegvesen.no/api/images/0529006_1
 https://kamera.atlas.vegvesen.no/api/images/0529007_1
+https://kamera.atlas.vegvesen.no/api/images/0529008_1
 https://kamera.atlas.vegvesen.no/api/images/0529009_1
 https://kamera.atlas.vegvesen.no/api/images/0529012_1
 https://kamera.atlas.vegvesen.no/api/images/0529013_1
@@ -111,6 +112,7 @@ https://kamera.atlas.vegvesen.no/api/images/0729002_1
 https://kamera.atlas.vegvesen.no/api/images/0729005_1
 https://kamera.atlas.vegvesen.no/api/images/0729007_1
 https://kamera.atlas.vegvesen.no/api/images/0729008_1
+https://kamera.atlas.vegvesen.no/api/images/0729009_1
 https://kamera.atlas.vegvesen.no/api/images/0729011_1
 https://kamera.atlas.vegvesen.no/api/images/0729012_1
 https://kamera.atlas.vegvesen.no/api/images/0729013_1
@@ -234,6 +236,7 @@ https://kamera.atlas.vegvesen.no/api/images/1229028_2
 https://kamera.atlas.vegvesen.no/api/images/1229029_1
 https://kamera.atlas.vegvesen.no/api/images/1229029_2
 https://kamera.atlas.vegvesen.no/api/images/1229030_1
+https://kamera.atlas.vegvesen.no/api/images/1229031_1
 https://kamera.atlas.vegvesen.no/api/images/1229032_1
 https://kamera.atlas.vegvesen.no/api/images/1229033_1
 https://kamera.atlas.vegvesen.no/api/images/1229034_1
@@ -270,7 +273,9 @@ https://kamera.atlas.vegvesen.no/api/images/1429001_1
 https://kamera.atlas.vegvesen.no/api/images/1429003_1
 https://kamera.atlas.vegvesen.no/api/images/1429004_1
 https://kamera.atlas.vegvesen.no/api/images/1429004_2
+https://kamera.atlas.vegvesen.no/api/images/1429005_1
 https://kamera.atlas.vegvesen.no/api/images/1429006_1
+https://kamera.atlas.vegvesen.no/api/images/1429006_2
 https://kamera.atlas.vegvesen.no/api/images/1429007_1
 https://kamera.atlas.vegvesen.no/api/images/1429008_1
 https://kamera.atlas.vegvesen.no/api/images/1429009_1
@@ -295,6 +300,7 @@ https://kamera.atlas.vegvesen.no/api/images/1429023_1
 https://kamera.atlas.vegvesen.no/api/images/1429024_1
 https://kamera.atlas.vegvesen.no/api/images/1429025_1
 https://kamera.atlas.vegvesen.no/api/images/1429026_1
+https://kamera.atlas.vegvesen.no/api/images/1429026_2
 https://kamera.atlas.vegvesen.no/api/images/1429027_1
 https://kamera.atlas.vegvesen.no/api/images/1429028_1
 https://kamera.atlas.vegvesen.no/api/images/1429030_1
