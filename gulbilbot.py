@@ -320,8 +320,10 @@ def verify_with_copilot(image_path):
             f"Only confirm actual yellow painted vehicles."
         )
 
-        # Try multiple vision-capable models
-        models_to_try = ["gpt-5.4-mini", "claude-haiku-4.5", "claude-sonnet-4.5"]
+        # Copilot Free accounts can only select Auto. Auto routes each request
+        # to an eligible model for the account, including vision-capable models
+        # when the attachment requires it.
+        models_to_try = ["auto"]
 
         for model in models_to_try:
             try:
