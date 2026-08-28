@@ -68,7 +68,8 @@ jobs:
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
           # Copilot CLI checks GH_TOKEN first (highest priority)
-          # Claude Haiku 4.5 supports vision on free plan
+          # Copilot Free accounts use Auto model selection; the verifier passes
+          # --model auto so GitHub chooses an eligible vision-capable model.
 
       - name: Cleanup temporary files
         if: always()
